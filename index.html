@@ -405,7 +405,8 @@ $ sudo apt-get install docker-ce # 安装最新版的docker
 <pre><code>$ apt-cache policy docker-ce # 查看可供安装的所有docker版本
 $ sudo apt-get install docker-ce=18.03.0~ce-0~ubuntu # 安装指定版本的docker
 </code></pre><h3 id="2-4-检查docker是否安装成功"><a href="#2-4-检查docker是否安装成功" class="headerlink" title="2.4 检查docker是否安装成功"></a>2.4 检查docker是否安装成功</h3><pre><code>$ docker --version # 查看安装的docker版本********
-</code></pre>
+</code></pre><p>设置docker容器在启动docker后自启动，后面为容器id<br>docker update –restart=always ea653e02dce1<br>测试：service docker restart</p>
+
           
         
       
