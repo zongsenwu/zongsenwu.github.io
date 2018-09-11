@@ -73,21 +73,21 @@
 
 
 
-<meta name="description" content="节点类如下： public class ListNode {     int val;     ListNode next;      ListNode(int x) {         val = x;     } } 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;#123;    ListNode pr">
+<meta name="description" content="节点类如下：12345678public class ListNode &amp;#123;    int val;    ListNode next;    ListNode(int x) &amp;#123;        val = x;    &amp;#125;&amp;#125; 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;">
 <meta property="og:type" content="article">
 <meta property="og:title" content="反转单向链表">
 <meta property="og:url" content="http://yoursite.com/2018/09/11/反转单向链表/index.html">
 <meta property="og:site_name" content="精致的博客">
-<meta property="og:description" content="节点类如下： public class ListNode {     int val;     ListNode next;      ListNode(int x) {         val = x;     } } 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;#123;    ListNode pr">
+<meta property="og:description" content="节点类如下：12345678public class ListNode &amp;#123;    int val;    ListNode next;    ListNode(int x) &amp;#123;        val = x;    &amp;#125;&amp;#125; 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://yoursite.com/images/20170419120811149.png">
 <meta property="og:image" content="http://yoursite.com/images/20170419120851823.png">
 <meta property="og:image" content="http://yoursite.com/images/20170419120936511.png">
 <meta property="og:image" content="http://yoursite.com/images/20170419121543081.png">
-<meta property="og:updated_time" content="2018-09-11T07:30:15.850Z">
+<meta property="og:updated_time" content="2018-09-11T07:32:35.436Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="反转单向链表">
-<meta name="twitter:description" content="节点类如下： public class ListNode {     int val;     ListNode next;      ListNode(int x) {         val = x;     } } 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;#123;    ListNode pr">
+<meta name="twitter:description" content="节点类如下：12345678public class ListNode &amp;#123;    int val;    ListNode next;    ListNode(int x) &amp;#123;        val = x;    &amp;#125;&amp;#125; 反转单向链表的函数如下：1234567891011public ListNode reverseList(ListNode head) &amp;">
 <meta name="twitter:image" content="http://yoursite.com/images/20170419120811149.png">
 
 
@@ -372,16 +372,8 @@
       
 
       
-        <p>节点类如下：</p>
-<pre><code>public class ListNode {
-    int val;
-    ListNode next;
-
-    ListNode(int x) {
-        val = x;
-    }
-}
-</code></pre><p>反转单向链表的函数如下：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ListNode <span class="title">reverseList</span><span class="params">(ListNode head)</span> </span>&#123;</span><br><span class="line">    ListNode pre = <span class="keyword">null</span>;</span><br><span class="line">    ListNode next = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">while</span> (head != <span class="keyword">null</span>) &#123;</span><br><span class="line">        next = head.next;</span><br><span class="line">        head.next = pre;</span><br><span class="line">        pre = head;</span><br><span class="line">        head = next;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> pre;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+        <p>节点类如下：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">ListNode</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> val;</span><br><span class="line">    ListNode next;</span><br><span class="line"></span><br><span class="line">    ListNode(<span class="keyword">int</span> x) &#123;</span><br><span class="line">        val = x;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>反转单向链表的函数如下：<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> ListNode <span class="title">reverseList</span><span class="params">(ListNode head)</span> </span>&#123;</span><br><span class="line">    ListNode pre = <span class="keyword">null</span>;</span><br><span class="line">    ListNode next = <span class="keyword">null</span>;</span><br><span class="line">    <span class="keyword">while</span> (head != <span class="keyword">null</span>) &#123;</span><br><span class="line">        next = head.next;</span><br><span class="line">        head.next = pre;</span><br><span class="line">        pre = head;</span><br><span class="line">        head = next;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> pre;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
 <p>现在有一个单向链表如下图所示：<br><img src="/images/20170419120811149.png" alt=""><br>反转后如下所示：<br><img src="/images/20170419120851823.png" alt=""><br>接下来解析反转函数：<br><img src="/images/20170419120936511.png" alt=""></p>
 <p><strong>第一步：next = head.next;<br>将 head.next 赋值给 next 变量，也就是说 next 指向了节点2，先将节点2 保存起来。<br>第二步：head.next = pre<br>将 pre 变量赋值给 head.next，即 节点1 指向了 null<br>第三步：pre = head<br>将 head 赋值给了 pre，即 pre 指向节点1，将节点1 设为“上一个节点”<br>第四步：head = next<br>将 next 赋值给 head，即 head 指向了节点2。将节点2 设为“头节点”</strong></p>
 <p>第一次循环完毕，进入第二次循环，如下图：<br><img src="/images/20170419121543081.png" alt=""></p>
