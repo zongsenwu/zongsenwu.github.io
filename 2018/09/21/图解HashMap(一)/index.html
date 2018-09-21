@@ -73,14 +73,13 @@
 
 
 
-<meta name="description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多">
+<meta name="description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多了">
 <meta property="og:type" content="article">
 <meta property="og:title" content="图解HashMap(一)">
 <meta property="og:url" content="http://yoursite.com/2018/09/21/图解HashMap(一)/index.html">
 <meta property="og:site_name" content="精致的博客">
-<meta property="og:description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多">
+<meta property="og:description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多了">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:image" content="http://yoursite.com/images/20170419121543081.png">
 <meta property="og:image" content="http://yoursite.com/images/hashmap_01.png">
 <meta property="og:image" content="http://yoursite.com/images/hashmap_002.png">
 <meta property="og:image" content="http://yoursite.com/images/hashmap_08.png">
@@ -102,11 +101,11 @@
 <meta property="og:image" content="http://yoursite.com/images/hashmap_020.png">
 <meta property="og:image" content="http://yoursite.com/images/hashmap_022.png">
 <meta property="og:image" content="http://yoursite.com/images/hashmap_024.png">
-<meta property="og:updated_time" content="2018-09-21T07:18:59.411Z">
+<meta property="og:updated_time" content="2018-09-21T07:21:17.115Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="图解HashMap(一)">
-<meta name="twitter:description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多">
-<meta name="twitter:image" content="http://yoursite.com/images/20170419121543081.png">
+<meta name="twitter:description" content="HashMap是什么在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多了">
+<meta name="twitter:image" content="http://yoursite.com/images/hashmap_01.png">
 
 
 
@@ -390,8 +389,7 @@
       
 
       
-        <p><img src="/images/20170419121543081.png" alt=""></p>
-<h3 id="HashMap是什么"><a href="#HashMap是什么" class="headerlink" title="HashMap是什么"></a>HashMap是什么</h3><p>在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。<br><img src="/images/hashmap_01.png" alt=""><br>到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多了。小明总结了下查找耗时的原因，发现是因为这些东西放的没有规律，如果他把每个箱子分个类别，比如定一个箱子专门放手机、电脑等电子设备，有专门放衣服的箱子等等，那么他找东西花的时间就可以大大缩短了。</p>
+        <h3 id="HashMap是什么"><a href="#HashMap是什么" class="headerlink" title="HashMap是什么"></a>HashMap是什么</h3><p>在回答这个问题之前先看个例子：小明打算从A市搬家到B市，拿了两个箱子把自己的物品打包就出发了。<br><img src="/images/hashmap_01.png" alt=""><br>到了B市之后，他想拿手机给家里报个平安，这时候问题来了，东西多了他忘记手机放在哪个箱子了？小明开始打开1号箱子找手机，没找到；再打开2号箱子找，找到手机。当只有2个箱子的时候，东西又不多的情况下，他可能花个2分钟就找到手机了，假如有20个箱子，每个箱子的东西又多又杂，那么花的时间就多了。小明总结了下查找耗时的原因，发现是因为这些东西放的没有规律，如果他把每个箱子分个类别，比如定一个箱子专门放手机、电脑等电子设备，有专门放衣服的箱子等等，那么他找东西花的时间就可以大大缩短了。</p>
 <p>其实HashMap也是用到这种思路，HashMap作为一种数据结构，像数组和链表一样用于常规的增删改查，在存数据的时候(put)并不是随便乱放，而是会先做一次类似“分类”的操作再存储，一旦“分类”存储之后，下次取(get)的时候就可以大大缩短查找的时间。我们知道数组在执行查、改的效率很高，而增、删(不是尾部)的效率低，链表相反，HashMap则是把这两者结合起来，看下HashMap的数据结构<br><img src="/images/hashmap_002.png" alt=""><br>从上面的结构可以看出，通常情况下HashMap是以数组和链表的组合构成(Java8中将链表长度超过8的链表转化成红黑树)。结合上面找手机的例子，我们简单分析下HashMap存取操作的心路历程。put存一个键值对的时候(比如存上图盖伦)，先根据键值”分类”，”分类”一顿操作后告诉我们，盖伦应该属于14号坑，直接定位到14号坑。接下来有几种情况：</p>
 <ul>
 <li>14号坑没人，nice，直接存值；</li>
