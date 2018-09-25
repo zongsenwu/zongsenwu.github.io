@@ -1845,7 +1845,7 @@ pre .javascript .function {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #20444f;
+  background: #ffab1b;
 }
 .links-of-blogroll {
   font-size: 13px;
@@ -2941,5 +2941,7 @@ body {
   background: #282828 none repeat scroll !important;
 }
 .content {
+  margin-left: 60px;
+  margin-right: 60px;
   background: #000 none repeat scroll !important;
 }
