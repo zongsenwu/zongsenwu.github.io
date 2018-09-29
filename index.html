@@ -287,6 +287,190 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/09/29/图解ConcurrentHashMap/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Simeon">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/1.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="精致的博客">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2018/09/29/图解ConcurrentHashMap/" itemprop="url">图解ConcurrentHashMap</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-09-29T10:24:28+08:00">
+                2018-09-29
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/09/29/图解ConcurrentHashMap/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/2018/09/29/图解ConcurrentHashMap/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h4 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h4><p>上篇文章介绍了 HashMap 在多线程并发情况下是不安全的，多线程并发推荐使用 ConcurrentHashMap ，那么 ConcurrentHashMap 是什么？它的设计思想是什么，源码是怎么实现的？</p>
+<h4 id="ConcurrentHashMap是什么"><a href="#ConcurrentHashMap是什么" class="headerlink" title="ConcurrentHashMap是什么"></a>ConcurrentHashMap是什么</h4><p>Concurrent翻译过来是并发的意思，字面理解它的作用是处理并发情况的 HashMap，在介绍它之前先回顾下之前的知识。通过前面两篇学习，我们知道多线程并发下 HashMap 是不安全的(如死循环)，更普遍的是多线程并发下，由于堆内存对于各个线程是共享的，而 HashMap 的 put 方法不是原子操作，假设Thread1先 put 值，然后 sleep 2秒(也可以是系统时间片切换失去执行权)，在这2秒内值被Thread2改了，Thread1“醒来”再 get 的时候发现已经不是原来的值了，这就容易出问题。<br><img src="/images/16048517033b28e4.png" alt=""><br>那么如何避免这种多线程“奥迪变奥拓”的情况呢？常规思路就是给 HashMap 的 put 方法加锁(synchronized)，保证同一个时刻只允许一个线程拥有对 hashmap 有写的操作权限即可。然而假如线程1中操作耗时，占着茅坑半天不出来，其他需要操作该 hashmap 的线程就需要在门口排队半天，严重影响用户体验(HashTable 就是这么干的)。举个生活中的例子，很多银行除了存取钱，还支持存取贵重物品，贵重物品都放在保险箱里，把 HashMap 和 HashTable 比作银行，结构：<br><img src="/images/160485161ab27568.png" alt=""><br>把线程比作人，对应的情况如下：</p>
+<ul>
+<li>HashMap牌银行：我们的服务宗旨是不用排队，同一时间多人都有机会修改保险柜里的东西，你以为你存的是美元？取出来的其实是日元，破产就在一瞬间，刺不刺激。</li>
+<li>HashTable牌银行：我们的服务宗旨是要排队，同一时间只有一个人有机会修改保险柜里的东西，其余的人只能看不能动手改，保你存的是美元取得还是美元。什么？你说如果那人在里面睡着了不出来怎么办？不要着急，来，坐下来打会麻将等他出来。<br><img src="/images/1604851619a0885b.png" alt=""></li>
+</ul>
+<p>多线程下用 HashMap 不确定性太高，有破产的风险，不能选；用 HashTable 不会破产，但是用户体验不太好，那么怎样才能做到多人存取既不影响他人存值，又不用排队呢？有人提议搞个「银行者联盟」，多开几个像HashTable 这种「带锁」的银行就好了，有多少人办理业务，就开多少个银行，一对一服务，这个区都是大老板，开银行的成本都是小钱，于是「银行者联盟」成立了。</p>
+<p>接下来的情况是这样的：比如盖伦和亚索一起去银行存他们的大宝剑，这个「银行者联盟」一顿操作，然后对盖伦说，1号银行现在没人，你可以去那存，不用排队，然后盖伦就去1号银行存他的大宝剑，1号银行把盖伦接进门，马上拉闸，一顿操作，然后把盖伦的大宝剑放在第x行第x个保险箱，等盖伦办妥离开后，再开闸；同样「银行者联盟」对亚索说，2号银行现在没人，你可以去那存，不用排队，然后亚索去2号银行存他的大宝剑，2号银行把亚索接进门，马上拉闸，一顿操作把亚索的大宝剑放在第x行第x号保险箱，等亚索离开后再开闸，此时不管盖伦和亚索在各自银行里面待多久都不会影响到彼此，不用担心自己的大宝剑被人偷换了。这就是ConcurrentHashMap的设计思路，用一个图来理解<br><img src="/images/1604851619eadf72.png" alt=""><br>从上图可以看出，此时锁的是对应的单个银行，而不是整个「银行者联盟」。分析下这种设计的特点：</p>
+<ul>
+<li>多个银行组成的「银行者联盟」</li>
+<li>当有人来办理业务时，「银行者联盟」需要确定这个人去哪个银行</li>
+<li>当此人去到指定银行办理业务后，该银行上锁，其他人不能同时执行修改操作，直到此人离开后解锁</li>
+</ul>
+<p>由这几点基本思想可以引发一些思考，比如：<br>1.成立「银行者联盟」时初识银行数是多少？怎么设计合理？<br>上面这张图没有给出是否需要排队的结论，这是因为需要结合实际情况分析，比如初识化有16个银行，只有两个人来办理业务，那自然不需要排队；如果现在16个银行都有人在办理业务，这时候来了第17个人，那么他还是需要排队的。由于「银行者联盟」事先无法得知会有多少人来办理业务，所以在它创立的时候需要制定一个「标准」，即初始银行数量，人多的情况「银行者联盟」应该多开几家银行，避免别人排队；人少的情况应该少开，避免浪费钱(什么，你说不差钱？那也不行)<br>2.当有人来办理业务的时候，「银行者联盟」怎么确定此人去哪个银行？<br>正常情况下，如果所有银行都是未上锁状态，那么有人来办理业务去哪都不用排队，当其中有些银行已经上锁，那么后续「银行者联盟」给人推荐的时候就不能把客户往上锁的银行引了，否则分分钟给人锤成麻瓜。因此「银行者联盟」需要时刻保持清醒的头脑，对自己的银行空闲情况了如指掌，每次给用户推荐都应该是最好的选择。<br>3.「银行者联盟」怎么保证同一时间不会有两个人在同一个银行拥有存权限？<br>通过对指定银行加锁/解锁的方式实现。</p>
+<h3 id="源码分析"><a href="#源码分析" class="headerlink" title="源码分析"></a>源码分析</h3><h4 id="Java7-源码分析"><a href="#Java7-源码分析" class="headerlink" title="Java7 源码分析"></a>Java7 源码分析</h4><p>通过 Java7 的源码分析下代码实现，先看下一些重要的成员<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//默认的数组大小16(HashMap里的那个数组)</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> DEFAULT_INITIAL_CAPACITY = <span class="number">16</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">//扩容因子0.75</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">float</span> DEFAULT_LOAD_FACTOR = <span class="number">0.75f</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">//ConcurrentHashMap中的数组</span></span><br><span class="line"><span class="keyword">final</span> Segment&lt;K,V&gt;[] segments</span><br><span class="line"></span><br><span class="line"><span class="comment">//默认并发标准16</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> DEFAULT_CONCURRENCY_LEVEL = <span class="number">16</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">//Segment是ReentrantLock子类，因此拥有锁的操作</span></span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> <span class="class"><span class="keyword">class</span> <span class="title">Segment</span>&lt;<span class="title">K</span>,<span class="title">V</span>&gt; <span class="keyword">extends</span> <span class="title">ReentrantLock</span> <span class="keyword">implements</span> <span class="title">Serializable</span> </span>&#123;</span><br><span class="line">  <span class="comment">//HashMap的那一套，分别是数组、键值对数量、阈值、负载因子</span></span><br><span class="line">  <span class="keyword">transient</span> <span class="keyword">volatile</span> HashEntry&lt;K,V&gt;[] table;</span><br><span class="line">  <span class="keyword">transient</span> <span class="keyword">int</span> count;</span><br><span class="line">  <span class="keyword">transient</span> <span class="keyword">int</span> threshold;</span><br><span class="line">  <span class="keyword">final</span> <span class="keyword">float</span> loadFactor;</span><br><span class="line"></span><br><span class="line">  Segment(<span class="keyword">float</span> lf, <span class="keyword">int</span> threshold, HashEntry&lt;K,V&gt;[] tab) &#123;</span><br><span class="line">            <span class="keyword">this</span>.loadFactor = lf;</span><br><span class="line">            <span class="keyword">this</span>.threshold = threshold;</span><br><span class="line">            <span class="keyword">this</span>.table = tab;</span><br><span class="line">        &#125;</span><br><span class="line"> &#125;</span><br><span class="line"></span><br><span class="line"> <span class="comment">//换了马甲还是认识你！！！HashEntry对象，存key、value、hash值以及下一个节点</span></span><br><span class="line"> <span class="keyword">static</span> <span class="keyword">final</span> <span class="class"><span class="keyword">class</span> <span class="title">HashEntry</span>&lt;<span class="title">K</span>,<span class="title">V</span>&gt; </span>&#123;</span><br><span class="line">        <span class="keyword">final</span> <span class="keyword">int</span> hash;</span><br><span class="line">        <span class="keyword">final</span> K key;</span><br><span class="line">        <span class="keyword">volatile</span> V value;</span><br><span class="line">        <span class="keyword">volatile</span> HashEntry&lt;K,V&gt; next;</span><br><span class="line"> &#125;</span><br><span class="line"><span class="comment">//segment中HashEntry[]数组最小长度</span></span><br><span class="line"><span class="keyword">static</span> <span class="keyword">final</span> <span class="keyword">int</span> MIN_SEGMENT_TABLE_CAPACITY = <span class="number">2</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">//用于定位在segments数组中的位置，下面介绍</span></span><br><span class="line"><span class="keyword">final</span> <span class="keyword">int</span> segmentMask;</span><br><span class="line"><span class="keyword">final</span> <span class="keyword">int</span> segmentShift;</span><br></pre></td></tr></table></figure></p>
+<p>上面这些一下出来有点接受不了没关系，下面都会介绍到。</p>
+<p>接下来从最简单的初识化开始分析<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ConcurrentHashMap concurrentHashMap = <span class="keyword">new</span> ConcurrentHashMap();</span><br></pre></td></tr></table></figure></p>
+<p>默认构造函数会调用带三个参数的构造函数<br>   <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ConcurrentHashMap</span><span class="params">()</span> </span>&#123;</span><br><span class="line">       <span class="keyword">this</span>(DEFAULT_INITIAL_CAPACITY, DEFAULT_LOAD_FACTOR, DEFAULT_CONCURRENCY_LEVEL);</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   <span class="function"><span class="keyword">public</span> <span class="title">ConcurrentHashMap</span><span class="params">(<span class="keyword">int</span> initialCapacity,</span></span></span><br><span class="line"><span class="function"><span class="params">                            <span class="keyword">float</span> loadFactor, <span class="keyword">int</span> concurrencyLevel)</span> </span>&#123;</span><br><span class="line">       <span class="keyword">if</span> (!(loadFactor &gt; <span class="number">0</span>) || initialCapacity &lt; <span class="number">0</span> || concurrencyLevel &lt;= <span class="number">0</span>)</span><br><span class="line">           <span class="keyword">throw</span> <span class="keyword">new</span> IllegalArgumentException();</span><br><span class="line">       <span class="keyword">if</span> (concurrencyLevel &gt; MAX_SEGMENTS)</span><br><span class="line">           concurrencyLevel = MAX_SEGMENTS;</span><br><span class="line">       <span class="comment">// Find power-of-two sizes best matching arguments</span></span><br><span class="line">       <span class="comment">//步骤① start</span></span><br><span class="line">       <span class="keyword">int</span> sshift = <span class="number">0</span>;</span><br><span class="line">       <span class="keyword">int</span> ssize = <span class="number">1</span>;</span><br><span class="line">       <span class="keyword">while</span> (ssize &lt; concurrencyLevel) &#123;</span><br><span class="line">           ++sshift;</span><br><span class="line">           ssize &lt;&lt;= <span class="number">1</span>;</span><br><span class="line">       &#125;</span><br><span class="line">       <span class="keyword">this</span>.segmentShift = <span class="number">32</span> - sshift;</span><br><span class="line">       <span class="keyword">this</span>.segmentMask = ssize - <span class="number">1</span>;</span><br><span class="line">       <span class="comment">//步骤① end</span></span><br><span class="line">       <span class="comment">//步骤② start</span></span><br><span class="line">       <span class="keyword">if</span> (initialCapacity &gt; MAXIMUM_CAPACITY)</span><br><span class="line">           initialCapacity = MAXIMUM_CAPACITY;</span><br><span class="line">       <span class="keyword">int</span> c = initialCapacity / ssize;</span><br><span class="line">       <span class="keyword">if</span> (c * ssize &lt; initialCapacity)</span><br><span class="line">           ++c;</span><br><span class="line">       <span class="keyword">int</span> cap = MIN_SEGMENT_TABLE_CAPACITY;</span><br><span class="line">       <span class="keyword">while</span> (cap &lt; c)</span><br><span class="line">           cap &lt;&lt;= <span class="number">1</span>;</span><br><span class="line">       <span class="comment">//步骤② end</span></span><br><span class="line">       <span class="comment">// create segments and segments[0]</span></span><br><span class="line">       <span class="comment">//步骤③ start</span></span><br><span class="line">       Segment&lt;K,V&gt; s0 =</span><br><span class="line">           <span class="keyword">new</span> Segment&lt;K,V&gt;(loadFactor, (<span class="keyword">int</span>)(cap * loadFactor),</span><br><span class="line">                            (HashEntry&lt;K,V&gt;[])<span class="keyword">new</span> HashEntry[cap]);</span><br><span class="line">       Segment&lt;K,V&gt;[] ss = (Segment&lt;K,V&gt;[])<span class="keyword">new</span> Segment[ssize];</span><br><span class="line">       UNSAFE.putOrderedObject(ss, SBASE, s0); <span class="comment">// ordered write of segments[0]</span></span><br><span class="line">       <span class="keyword">this</span>.segments = ss;</span><br><span class="line">       <span class="comment">//步骤③ end</span></span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure></p>
+<p>上面定义了许多临时变量，注释写的又少，第一次看名字根本不知道这鬼东西代表什么意思，不过我们可以把已知的数据代进去，算出这些变量的值，再分析能不能找出一些猫腻。假设这是第一次默认创建：</p>
+<ul>
+<li>步骤① concurrencyLevel = 16 ，可以计算出 sshift = 4，ssize = 16，segmentShift = 28，segmentMask = 15；</li>
+<li>步骤② c = 16/16 = 1，cap = 2；</li>
+<li>步骤③有句注释，创建 Segment 数组 segments 并初始化 segments [0] ，所以 s0 初始化后数组长度为2，负载因子0.75，阈值为1；再看这里的ss的初始化(重点，圈起来要考！！！)， ssize 此时为16，所以默认数组长度16，给人一种感觉正好和我们传的 concurrencyLevel 一样？看下下面的例子<br><img src="/images/20180929101810.png" alt=""><br>所以我们传 concurrencyLevel 不一定就是最后数组的长度，长度的计算公式：</li>
+</ul>
+<blockquote>
+<p>长度 = 2的n次方(2的n次方 &gt;= concurrencyLevel)</p>
+</blockquote>
+<p>到这里只是创建了一个长度为16的Segment 数组，并初始化数组0号位置，segmentShift和segmentMask还没派上用场，画图存档:</p>
+<p><img src="/images/160485161b7e9174.png" alt=""><br>接着看 put 方法<br>   <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> V <span class="title">put</span><span class="params">(K key, V value)</span> </span>&#123;</span><br><span class="line">       Segment&lt;K,V&gt; s;</span><br><span class="line">       <span class="comment">//步骤①注意valus不能为空！！！</span></span><br><span class="line">       <span class="keyword">if</span> (value == <span class="keyword">null</span>)</span><br><span class="line">           <span class="keyword">throw</span> <span class="keyword">new</span> NullPointerException();</span><br><span class="line">       <span class="comment">//根据key计算hash值，key也不能为null，否则hash(key)报空指针</span></span><br><span class="line">       <span class="keyword">int</span> hash = hash(key);</span><br><span class="line">       <span class="comment">//步骤②派上用场了，根据hash值计算在segments数组中的位置</span></span><br><span class="line">       <span class="keyword">int</span> j = (hash &gt;&gt;&gt; segmentShift) &amp; segmentMask;</span><br><span class="line">       <span class="comment">//步骤③查看当前数组中指定位置Segment是否为空</span></span><br><span class="line">       <span class="comment">//若为空，先创建初始化Segment再put值，不为空，直接put值。</span></span><br><span class="line">       <span class="keyword">if</span> ((s = (Segment&lt;K,V&gt;)UNSAFE.getObject          <span class="comment">// nonvolatile; recheck</span></span><br><span class="line">            (segments, (j &lt;&lt; SSHIFT) + SBASE)) == <span class="keyword">null</span>) <span class="comment">//  in ensureSegment</span></span><br><span class="line">           s = ensureSegment(j);</span><br><span class="line">       <span class="keyword">return</span> s.put(key, hash, value, <span class="keyword">false</span>);</span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure></p>
+<p>步骤①可以看到和 HashMap 的区别，这里的 key/value 为空会报空指针异常；步骤②先根据 key 值计算 hash 值，再和前面算出来的两个变量计算出这个 key 应该放在哪个Segment中(具体怎么计算的有兴趣可以去研究下，先高位运算再取与)，假设我们算出来该键值对应该放在5号，步骤③判断5号为空，看下 ensureSegment() 方法<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> Segment&lt;K,V&gt; <span class="title">ensureSegment</span><span class="params">(<span class="keyword">int</span> k)</span> </span>&#123;</span><br><span class="line">        <span class="comment">//获取segments</span></span><br><span class="line">        <span class="keyword">final</span> Segment&lt;K,V&gt;[] ss = <span class="keyword">this</span>.segments;</span><br><span class="line">        <span class="keyword">long</span> u = (k &lt;&lt; SSHIFT) + SBASE; <span class="comment">// raw offset</span></span><br><span class="line">        Segment&lt;K,V&gt; seg;</span><br><span class="line">        <span class="keyword">if</span> ((seg = (Segment&lt;K,V&gt;)UNSAFE.getObjectVolatile(ss, u)) == <span class="keyword">null</span>) &#123;</span><br><span class="line">            <span class="comment">//拷贝一份和segment 0一样的segment</span></span><br><span class="line">            Segment&lt;K,V&gt; proto = ss[<span class="number">0</span>]; <span class="comment">// use segment 0 as prototype</span></span><br><span class="line">            <span class="comment">//大小和segment 0一致，为2</span></span><br><span class="line">            <span class="keyword">int</span> cap = proto.table.length;</span><br><span class="line">            <span class="comment">//负载因子和segment 0一致，为0.75</span></span><br><span class="line">            <span class="keyword">float</span> lf = proto.loadFactor;</span><br><span class="line">            <span class="comment">//阈值和segment 0一致，为1</span></span><br><span class="line">            <span class="keyword">int</span> threshold = (<span class="keyword">int</span>)(cap * lf);</span><br><span class="line">            <span class="comment">//根据大小创建HashEntry数组tab</span></span><br><span class="line">            HashEntry&lt;K,V&gt;[] tab = (HashEntry&lt;K,V&gt;[])<span class="keyword">new</span> HashEntry[cap];</span><br><span class="line">            <span class="comment">//再次检查</span></span><br><span class="line">            <span class="keyword">if</span> ((seg = (Segment&lt;K,V&gt;)UNSAFE.getObjectVolatile(ss, u))</span><br><span class="line">                == <span class="keyword">null</span>) &#123; <span class="comment">// recheck</span></span><br><span class="line">                根据已有属性创建指定位置的Segment</span><br><span class="line">                Segment&lt;K,V&gt; s = <span class="keyword">new</span> Segment&lt;K,V&gt;(lf, threshold, tab);</span><br><span class="line">                <span class="keyword">while</span> ((seg = (Segment&lt;K,V&gt;)UNSAFE.getObjectVolatile(ss, u))</span><br><span class="line">                       == <span class="keyword">null</span>) &#123;</span><br><span class="line">                    <span class="keyword">if</span> (UNSAFE.compareAndSwapObject(ss, u, <span class="keyword">null</span>, seg = s))</span><br><span class="line">                        <span class="keyword">break</span>;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> seg;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure></p>
+<p>该方法重点在于拷贝了segments[0]，因此新创建的Segment与segment[0]的配置相同，由于多个线程都会有可能执行该方法，因此这里通过UNSAFE的一些原子性操作的方法做了多次的检查，到目前为止画图存档：</p>
+<p><img src="/images/1604851619098fed.png" alt=""><br>现在“舞台”也有了，请开始你的表演，看下 Segment 的put方法<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">final</span> V <span class="title">put</span><span class="params">(K key, <span class="keyword">int</span> hash, V value, <span class="keyword">boolean</span> onlyIfAbsent)</span> </span>&#123;</span><br><span class="line">    <span class="comment">//步骤① start</span></span><br><span class="line">    HashEntry&lt;K,V&gt; node = tryLock() ? <span class="keyword">null</span> :</span><br><span class="line">        scanAndLockForPut(key, hash, value);</span><br><span class="line">    <span class="comment">//步骤① end</span></span><br><span class="line">    V oldValue;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="comment">//步骤② start</span></span><br><span class="line">        <span class="comment">//获取Segment中的HashEntry[]</span></span><br><span class="line">        HashEntry&lt;K,V&gt;[] tab = table;</span><br><span class="line">        <span class="comment">//算出在HashEntry[]中的位置</span></span><br><span class="line">        <span class="keyword">int</span> index = (tab.length - <span class="number">1</span>) &amp; hash;</span><br><span class="line">        <span class="comment">//找到HashEntry[]中的指定位置的第一个节点</span></span><br><span class="line">        HashEntry&lt;K,V&gt; first = entryAt(tab, index);</span><br><span class="line">        <span class="keyword">for</span> (HashEntry&lt;K,V&gt; e = first;;) &#123;</span><br><span class="line">            <span class="comment">//如果不为空，遍历这条链</span></span><br><span class="line">            <span class="keyword">if</span> (e != <span class="keyword">null</span>) &#123;</span><br><span class="line">                K k;</span><br><span class="line">                <span class="comment">//情况① 之前已存过，则替换原值</span></span><br><span class="line">                <span class="keyword">if</span> ((k = e.key) == key ||</span><br><span class="line">                    (e.hash == hash &amp;&amp; key.equals(k))) &#123;</span><br><span class="line">                    oldValue = e.value;</span><br><span class="line">                    <span class="keyword">if</span> (!onlyIfAbsent) &#123;</span><br><span class="line">                        e.value = value;</span><br><span class="line">                        ++modCount;</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="keyword">break</span>;</span><br><span class="line">                &#125;</span><br><span class="line">                e = e.next;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">else</span> &#123;</span><br><span class="line">                <span class="comment">//情况② 另一个线程的准备工作</span></span><br><span class="line">                <span class="keyword">if</span> (node != <span class="keyword">null</span>)</span><br><span class="line">                    <span class="comment">//链表头插入方式</span></span><br><span class="line">                    node.setNext(first);</span><br><span class="line">                <span class="keyword">else</span> <span class="comment">//情况③ 该位置为空，则新建一个节点(注意这里采用链表头插入方式)</span></span><br><span class="line">                    node = <span class="keyword">new</span> HashEntry&lt;K,V&gt;(hash, key, value, first);</span><br><span class="line">                <span class="comment">//键值对数量+1</span></span><br><span class="line">                <span class="keyword">int</span> c = count + <span class="number">1</span>;</span><br><span class="line">                <span class="comment">//如果键值对数量超过阈值</span></span><br><span class="line">                <span class="keyword">if</span> (c &gt; threshold &amp;&amp; tab.length &lt; MAXIMUM_CAPACITY)</span><br><span class="line">                    <span class="comment">//扩容</span></span><br><span class="line">                    rehash(node);</span><br><span class="line">                <span class="keyword">else</span> <span class="comment">//未超过阈值，直接放在指定位置</span></span><br><span class="line">                    setEntryAt(tab, index, node);</span><br><span class="line">                ++modCount;</span><br><span class="line">                count = c;</span><br><span class="line">                <span class="comment">//插入成功返回null</span></span><br><span class="line">                oldValue = <span class="keyword">null</span>;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    <span class="comment">//步骤② end</span></span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        <span class="comment">//步骤③</span></span><br><span class="line">        <span class="comment">//解锁</span></span><br><span class="line">        unlock();</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//修改成功，返回原值</span></span><br><span class="line">    <span class="keyword">return</span> oldValue;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>上面的 put 方法其实和 Java7 HashMap里大致是一样的，只是多了加锁/解锁两步，也正因为这样才保证了同一时刻只有一个线程拥有修改的权限。按步骤分析下上面的流程：</p>
+<ul>
+<li>步骤① 执行 tryLock 方法获取锁，拿到锁返回null，没拿到锁执行 scanAndLockForPut 方法；</li>
+<li>步骤② 和 HashMap 里的那一套思路是一样的，不理解可以看下之前的文章介绍(情况②下面介绍)；</li>
+<li>步骤③   执行 unLock 方法解锁</li>
+</ul>
+<p>假设现在Thread1进来存值，前面没人来过，它可以成功拿到锁，根据计算，得出它要存的键值对应该放在HashEntry[] 的0号位置，0号位置为空，于是新建一个 HashEntry，并通过 setEntryAt() 方法，放在0号位置，然而还没等 Thread1 释放锁，系统的时间片切到了 Thread2 ，先画图存档</p>
+<p><img src="/images/1604851619dba9c0.png" alt=""><br>Thread2 也来存值，通过前面的计算，恰好 Thread2 也被定位到 segments[5]，接下来 Thread2 尝试获取锁，没有成功(Thread1 还未释放)，执行 scanAndLockForPut() 方法：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> HashEntry&lt;K,V&gt; <span class="title">scanAndLockForPut</span><span class="params">(K key, <span class="keyword">int</span> hash, V value)</span> </span>&#123;</span><br><span class="line">    <span class="comment">//通过Segment和hash值寻找匹配的HashEntry</span></span><br><span class="line">    HashEntry&lt;K,V&gt; first = entryForHash(<span class="keyword">this</span>, hash);</span><br><span class="line">    HashEntry&lt;K,V&gt; e = first;</span><br><span class="line">    HashEntry&lt;K,V&gt; node = <span class="keyword">null</span>;</span><br><span class="line">    <span class="comment">//重试次数</span></span><br><span class="line">    <span class="keyword">int</span> retries = -<span class="number">1</span>; <span class="comment">// negative while locating node</span></span><br><span class="line">    <span class="comment">//循环尝试获取锁</span></span><br><span class="line">    <span class="keyword">while</span> (!tryLock()) &#123;</span><br><span class="line">        HashEntry&lt;K,V&gt; f; <span class="comment">// to recheck first below</span></span><br><span class="line">        <span class="comment">//步骤①</span></span><br><span class="line">        <span class="keyword">if</span> (retries &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="comment">//情况① 没找到，之前表中不存在</span></span><br><span class="line">            <span class="keyword">if</span> (e == <span class="keyword">null</span>) &#123;</span><br><span class="line">                <span class="keyword">if</span> (node == <span class="keyword">null</span>) <span class="comment">// speculatively create node</span></span><br><span class="line">                    <span class="comment">//新建 HashEntry 备用,retries改成0</span></span><br><span class="line">                    node = <span class="keyword">new</span> HashEntry&lt;K,V&gt;(hash, key, value, <span class="keyword">null</span>);</span><br><span class="line">                retries = <span class="number">0</span>;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//情况② 找到，刚好第一个节点就是，retries改成0</span></span><br><span class="line">            <span class="keyword">else</span> <span class="keyword">if</span> (key.equals(e.key))</span><br><span class="line">                retries = <span class="number">0</span>;</span><br><span class="line">            <span class="comment">//情况③ 第一个节点不是，移到下一个，retries还是-1，继续找</span></span><br><span class="line">            <span class="keyword">else</span></span><br><span class="line">                e = e.next;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">//步骤②</span></span><br><span class="line">        <span class="comment">//尝试了MAX_SCAN_RETRIES次还没拿到锁，简直B了dog！</span></span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (++retries &gt; MAX_SCAN_RETRIES) &#123;</span><br><span class="line">            <span class="comment">//泉水挂机</span></span><br><span class="line">            lock();</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">//步骤③</span></span><br><span class="line">        <span class="comment">//在MAX_SCAN_RETRIES次过程中，key对应的entry发生了变化，则从头开始</span></span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ((retries &amp; <span class="number">1</span>) == <span class="number">0</span> &amp;&amp;</span><br><span class="line">                 (f = entryForHash(<span class="keyword">this</span>, hash)) != first) &#123;</span><br><span class="line">            e = first = f; <span class="comment">// re-traverse if entry changed</span></span><br><span class="line">            retries = -<span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> node;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>通过上面的注释分析可以看出，Thread2 虽然此刻没有权限修改，但是它也没闲着，利用等锁的这个时间，把自己要放的键值对在数组中哪个位置计算出来了，这样当 Thread2 一拿到锁就可以立马定位到具体位置操作，节省时间。上面的步骤③稍微解释下，比如 Thread2 通过查找得知自己要修改的值在0号位置，但在 Thread1 里面又把该值改到了1号位置，如果它还去0号操作那肯定出问题了，所以需要重新确定。<br>假设 Thread2 put 值为(“亚索”，“98”)，对应1号位置，那么在 scanAndLockForPut 方法中对应情况①，画图存档：</p>
+<p><img src="/images/1604851654f9c50a.png" alt=""></p>
+<p>再回到 Segment put 方法中的情况②，当 Thread1 释放锁后，Thread2 持有锁，并准备把亚索放在1号位置，然而此时 Segment[5] 里的键值对数量2 &gt; 阈值1，所以调用 rehash() 方法扩容，<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">rehash</span><span class="params">(HashEntry&lt;K,V&gt; node)</span> </span>&#123;</span><br><span class="line">            <span class="comment">//旧数组引用</span></span><br><span class="line">            HashEntry&lt;K,V&gt;[] oldTable = table;</span><br><span class="line">            <span class="comment">//旧数组长度</span></span><br><span class="line">            <span class="keyword">int</span> oldCapacity = oldTable.length;</span><br><span class="line">            <span class="comment">//新数组长度为旧数组的2倍</span></span><br><span class="line">            <span class="keyword">int</span> newCapacity = oldCapacity &lt;&lt; <span class="number">1</span>;</span><br><span class="line">            <span class="comment">//修改新的阈值</span></span><br><span class="line">            threshold = (<span class="keyword">int</span>)(newCapacity * loadFactor);</span><br><span class="line">            <span class="comment">//创建新表</span></span><br><span class="line">            HashEntry&lt;K,V&gt;[] newTable =</span><br><span class="line">                (HashEntry&lt;K,V&gt;[]) <span class="keyword">new</span> HashEntry[newCapacity];</span><br><span class="line">            <span class="keyword">int</span> sizeMask = newCapacity - <span class="number">1</span>;</span><br><span class="line">            <span class="comment">//遍历旧表</span></span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; oldCapacity ; i++) &#123;</span><br><span class="line">                HashEntry&lt;K,V&gt; e = oldTable[i];</span><br><span class="line">                <span class="keyword">if</span> (e != <span class="keyword">null</span>) &#123;</span><br><span class="line">                    HashEntry&lt;K,V&gt; next = e.next;</span><br><span class="line">                    <span class="comment">//确定在新表中的位置</span></span><br><span class="line">                    <span class="keyword">int</span> idx = e.hash &amp; sizeMask;</span><br><span class="line">                    <span class="comment">//情况① 链表只有一个节点，指定转移到新表指定位置</span></span><br><span class="line">                    <span class="keyword">if</span> (next == <span class="keyword">null</span>)   <span class="comment">//  Single node on list</span></span><br><span class="line">                        newTable[idx] = e;</span><br><span class="line">                    <span class="keyword">else</span> &#123; <span class="comment">// Reuse consecutive sequence at same slot</span></span><br><span class="line">                        HashEntry&lt;K,V&gt; lastRun = e;</span><br><span class="line">                        <span class="keyword">int</span> lastIdx = idx;</span><br><span class="line">                        <span class="keyword">for</span> (HashEntry&lt;K,V&gt; last = next;</span><br><span class="line">                             last != <span class="keyword">null</span>;</span><br><span class="line">                             last = last.next) &#123;</span><br><span class="line">                            <span class="comment">//情况② 扩容前后位置发生改变</span></span><br><span class="line">                            <span class="keyword">int</span> k = last.hash &amp; sizeMask;</span><br><span class="line">                            <span class="keyword">if</span> (k != lastIdx) &#123;</span><br><span class="line">                                lastIdx = k;</span><br><span class="line">                                lastRun = last;</span><br><span class="line">                            &#125;</span><br><span class="line">                        &#125;</span><br><span class="line">                        <span class="comment">//将改变的键值对放到新表的对应位置</span></span><br><span class="line">                        newTable[lastIdx] = lastRun;</span><br><span class="line">                        <span class="comment">// Clone remaining nodes</span></span><br><span class="line">                        <span class="comment">//情况③ 把链表中剩下的节点拷到新表中</span></span><br><span class="line">                        <span class="keyword">for</span> (HashEntry&lt;K,V&gt; p = e; p != lastRun; p = p.next) &#123;</span><br><span class="line">                            V v = p.value;</span><br><span class="line">                            <span class="keyword">int</span> h = p.hash;</span><br><span class="line">                            <span class="keyword">int</span> k = h &amp; sizeMask;</span><br><span class="line">                            HashEntry&lt;K,V&gt; n = newTable[k];</span><br><span class="line">                            newTable[k] = <span class="keyword">new</span> HashEntry&lt;K,V&gt;(h, p.key, v, n);</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//添加新的节点(链表头插入方式)</span></span><br><span class="line">            <span class="keyword">int</span> nodeIndex = node.hash &amp; sizeMask; <span class="comment">// add the new node</span></span><br><span class="line">            node.setNext(newTable[nodeIndex]);</span><br><span class="line">            newTable[nodeIndex] = node;</span><br><span class="line">            table = newTable;</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure></p>
+<p>同样是扩容转移，这里的代码比 HashMap 中的 transfer 多了一些操作，在上上篇学习 HashMap 扩容可知，扩容后键值对的新位置要么和原位置一样，要么等于原位置+旧数组的长度，所以画个图来理解下上面代码这么写的原因：<br><img src="/images/160485165d1009f1.png" alt=""><br>前提：当前 HashEntry[] 长度为8，阈值为 8*0.75 = 6，所以 put 第7个键值对需要扩容 ，盖伦和亚索扩容前后位置不变，妖姬和卡特扩容后位置需要加上原数组长度，所以执行上面代码流程：<br><img src="/images/160485165cdf50a0.png" alt=""><br><img src="/images/16048516639945e5.png" alt=""><br><img src="/images/16048516668b0456.png" alt=""><br><img src="/images/160485170382f54e.png" alt=""><br><img src="/images/1604851707c5bcc7.png" alt=""><br>上面的代码先找出扩容前后需要转移的节点，先执行转移，然后再把该条链上剩下的节点转移，之所以这么写是起到复用的效果，注释中也说了，在使用默认阈值的情况下，只有大约 1/6 的节点需要被 clone 。注意到目前为止，可以看到无论是扩容转移还是新增节点，Java7都是采用的头插入方式，流程图如下：<br><img src="/images/1604851702c89293.png" alt=""><br>相比之下，get 方法没有加锁/解锁的操作，代码比较简单就不分析了。</p>
+<h4 id="稍微说下Java8"><a href="#稍微说下Java8" class="headerlink" title="稍微说下Java8"></a>稍微说下Java8</h4><p>Java8 对比Java7有很大的不同，比如取消了Segments数组，允许并发扩容。</p>
+<p>先看下ConcurrentHashMap的初始化<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="title">ConcurrentHashMap</span><span class="params">()</span> </span>&#123;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>和Java7不一样，这里是个空方法，那么它具体的初始化操作呢？直接看下 put 方法<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> V <span class="title">put</span><span class="params">(K key, V value)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> putVal(key, value, <span class="keyword">false</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/** Implementation for put and putIfAbsent */</span></span><br><span class="line"><span class="function"><span class="keyword">final</span> V <span class="title">putVal</span><span class="params">(K key, V value, <span class="keyword">boolean</span> onlyIfAbsent)</span> </span>&#123;</span><br><span class="line">    <span class="comment">// key/value不能为空！！！</span></span><br><span class="line">    <span class="keyword">if</span> (key == <span class="keyword">null</span> || value == <span class="keyword">null</span>) <span class="keyword">throw</span> <span class="keyword">new</span> NullPointerException();</span><br><span class="line">    <span class="comment">//计算hash值</span></span><br><span class="line">    <span class="keyword">int</span> hash = spread(key.hashCode());</span><br><span class="line">    <span class="keyword">int</span> binCount = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">for</span> (Node&lt;K,V&gt;[] tab = table;;) &#123;</span><br><span class="line">        Node&lt;K,V&gt; f; <span class="keyword">int</span> n, i, fh;</span><br><span class="line">        <span class="comment">//注释① 表为null则初始化</span></span><br><span class="line">        <span class="keyword">if</span> (tab == <span class="keyword">null</span> || (n = tab.length) == <span class="number">0</span>)</span><br><span class="line">            tab = initTable();</span><br><span class="line">        <span class="comment">//CAS方法判断指定位置是否为null，为空则通过创建新节点，通过CAS方法设置在指定位置</span></span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ((f = tabAt(tab, i = (n - <span class="number">1</span>) &amp; hash)) == <span class="keyword">null</span>) &#123;</span><br><span class="line">            <span class="keyword">if</span> (casTabAt(tab, i, <span class="keyword">null</span>,</span><br><span class="line">                         <span class="keyword">new</span> Node&lt;K,V&gt;(hash, key, value, <span class="keyword">null</span>)))</span><br><span class="line">                <span class="keyword">break</span>;                   <span class="comment">// no lock when adding to empty bin</span></span><br><span class="line">        &#125;</span><br><span class="line">        <span class="comment">//当前节点正在扩容</span></span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> ((fh = f.hash) == MOVED)</span><br><span class="line">            tab = helpTransfer(tab, f);</span><br><span class="line">        <span class="comment">//指定位置不为空</span></span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">            V oldVal = <span class="keyword">null</span>;</span><br><span class="line">            <span class="comment">//注释② 加锁</span></span><br><span class="line">            <span class="keyword">synchronized</span> (f) &#123;</span><br><span class="line">                <span class="keyword">if</span> (tabAt(tab, i) == f) &#123;</span><br><span class="line">                    <span class="comment">//节点是链表的情况</span></span><br><span class="line">                    <span class="keyword">if</span> (fh &gt;= <span class="number">0</span>) &#123;</span><br><span class="line">                        binCount = <span class="number">1</span>;</span><br><span class="line">                        <span class="comment">//遍历整体链</span></span><br><span class="line">                        <span class="keyword">for</span> (Node&lt;K,V&gt; e = f;; ++binCount) &#123;</span><br><span class="line">                            K ek;</span><br><span class="line">                            <span class="comment">//如果已存在，替换原值</span></span><br><span class="line">                            <span class="keyword">if</span> (e.hash == hash &amp;&amp;</span><br><span class="line">                                ((ek = e.key) == key ||</span><br><span class="line">                                 (ek != <span class="keyword">null</span> &amp;&amp; key.equals(ek)))) &#123;</span><br><span class="line">                                oldVal = e.val;</span><br><span class="line">                                <span class="keyword">if</span> (!onlyIfAbsent)</span><br><span class="line">                                    e.val = value;</span><br><span class="line">                                <span class="keyword">break</span>;</span><br><span class="line">                            &#125;</span><br><span class="line">                            Node&lt;K,V&gt; pred = e;</span><br><span class="line">                            <span class="comment">//如果是新加节点，则以尾部插入实现添加</span></span><br><span class="line">                            <span class="keyword">if</span> ((e = e.next) == <span class="keyword">null</span>) &#123;</span><br><span class="line">                                pred.next = <span class="keyword">new</span> Node&lt;K,V&gt;(hash, key,</span><br><span class="line">                                                          value, <span class="keyword">null</span>);</span><br><span class="line">                                <span class="keyword">break</span>;</span><br><span class="line">                            &#125;</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="comment">//节点是红黑树的情况</span></span><br><span class="line">                    <span class="keyword">else</span> <span class="keyword">if</span> (f <span class="keyword">instanceof</span> TreeBin) &#123;</span><br><span class="line">                        Node&lt;K,V&gt; p;</span><br><span class="line">                        binCount = <span class="number">2</span>;</span><br><span class="line">                        <span class="comment">//遍历红黑树</span></span><br><span class="line">                        <span class="keyword">if</span> ((p = ((TreeBin&lt;K,V&gt;)f).putTreeVal(hash, key,</span><br><span class="line">                                                       value)) != <span class="keyword">null</span>) &#123;</span><br><span class="line">                            oldVal = p.val;</span><br><span class="line">                            <span class="keyword">if</span> (!onlyIfAbsent)</span><br><span class="line">                                p.val = value;</span><br><span class="line">                        &#125;</span><br><span class="line">                    &#125;</span><br><span class="line">                    <span class="keyword">else</span> <span class="keyword">if</span> (f <span class="keyword">instanceof</span> ReservationNode)</span><br><span class="line">                        <span class="keyword">throw</span> <span class="keyword">new</span> IllegalStateException(<span class="string">"Recursive update"</span>);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">if</span> (binCount != <span class="number">0</span>) &#123;</span><br><span class="line">                <span class="comment">//链表中节点个数超过8转成红黑树</span></span><br><span class="line">                <span class="keyword">if</span> (binCount &gt;= TREEIFY_THRESHOLD)</span><br><span class="line">                    treeifyBin(tab, i);</span><br><span class="line">                <span class="keyword">if</span> (oldVal != <span class="keyword">null</span>)</span><br><span class="line">                    <span class="keyword">return</span> oldVal;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="comment">//注释③ 添加节点</span></span><br><span class="line">    addCount(<span class="number">1L</span>, binCount);</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>代码有点长，第一次看很有可能引起身体不适，主要是因为引入了红黑树的判断和操作，以及线程安全的操作。同样key/value 为空会报空指针异常，这也是和 HashMap 一个明显的区别。</p>
+<h4 id="注释①"><a href="#注释①" class="headerlink" title="注释①"></a>注释①</h4><p>调用 initTable 初始化数组<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">final</span> Node&lt;K,V&gt;[] initTable() &#123;</span><br><span class="line">    Node&lt;K,V&gt;[] tab; <span class="keyword">int</span> sc;</span><br><span class="line">    <span class="keyword">while</span> ((tab = table) == <span class="keyword">null</span> || tab.length == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="comment">// sizeCtl小于0，当前线程让出执行权</span></span><br><span class="line">        <span class="keyword">if</span> ((sc = sizeCtl) &lt; <span class="number">0</span>)</span><br><span class="line">            Thread.yield(); <span class="comment">// lost initialization race; just spin</span></span><br><span class="line">        <span class="comment">//CAS 操作将 sizeCtl 值改为-1</span></span><br><span class="line">        <span class="keyword">else</span> <span class="keyword">if</span> (U.compareAndSwapInt(<span class="keyword">this</span>, SIZECTL, sc, -<span class="number">1</span>)) &#123;</span><br><span class="line">            <span class="keyword">try</span> &#123;</span><br><span class="line">                <span class="keyword">if</span> ((tab = table) == <span class="keyword">null</span> || tab.length == <span class="number">0</span>) &#123;</span><br><span class="line">                    <span class="keyword">int</span> n = (sc &gt; <span class="number">0</span>) ? sc : DEFAULT_CAPACITY;</span><br><span class="line">                    <span class="meta">@SuppressWarnings</span>(<span class="string">"unchecked"</span>)</span><br><span class="line">                    <span class="comment">//默认创建大小为16的数组</span></span><br><span class="line">                    Node&lt;K,V&gt;[] nt = (Node&lt;K,V&gt;[])<span class="keyword">new</span> Node&lt;?,?&gt;[n];</span><br><span class="line">                    table = tab = nt;</span><br><span class="line">                    sc = n - (n &gt;&gt;&gt; <span class="number">2</span>);</span><br><span class="line">                &#125;</span><br><span class="line">            &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">                <span class="comment">//初始化完再改回来</span></span><br><span class="line">                sizeCtl = sc;</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> tab;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>put方法并没有加锁，那么它是如何保证创建新表的时候并发安全呢？答案就是这里的 sizeCtl ，sizeCtl 默认值为0，当一个线程初始化数组时，会将 sizeCtl 改成 -1，由于被 volatile 修饰，对于其他线程来说这个变化是可见的，上面代码看到后续线程判断 sizeCtl 小于0 就会让出执行权。</p>
+<h4 id="注释②"><a href="#注释②" class="headerlink" title="注释②"></a>注释②</h4><p>Java8 摒弃了Segment，而是对数组中单个位置加锁。当指定位置节点不为 null 时，情况与 Java8 HashMap 操作类似，新节点的添加还是尾部插入方式。</p>
+<h4 id="注释③"><a href="#注释③" class="headerlink" title="注释③"></a>注释③</h4><p>不管是链表的还是红黑树，确定之后总的节点数会加1，可能会引起扩容，Java8 ConcunrrentHashMap 支持并发扩容，之前扩容总是由一个线程将旧数组中的键值对转移到新的数组中，支持并发的话，转移所需要的时间就可以缩短了，当然相应的并发处理控制逻辑也就更复杂了，扩容转移通过 transfer 方法完成，Java8中该方法很长，感兴趣的可以看下源码。。。<br>用一个图来表示 Java8 ConcurrentHashMap的样子<br><img src="/images/1604851700ef6bc1.png" alt=""></p>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>通过分析源码对比了 HashMap 与 ConcurrentHashMap的差别，以及Java7和Java8上 ConcurrentHashMap 设计的不同，当然还有很多坑没有填，比如其中调用了很多UNSAFE的CAS方法，可以减少性能上的消耗，平时很少用，了解的比较少；以及红黑树的具体原理和实现，后续慢慢填。。。</p>
+<h3 id="原文："><a href="#原文：" class="headerlink" title="原文："></a>原文：</h3><p><a href="http://rkhcy.github.io/2017/12/06/%E5%9B%BE%E8%A7%A3ConcurrentHashMap/" target="_blank" rel="noopener">http://rkhcy.github.io/2017/12/06/%E5%9B%BE%E8%A7%A3ConcurrentHashMap/</a></p>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/09/29/图解HashMap(二)/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -383,9 +567,9 @@
 <p><img src="/images/16021eead7b0c8b2.png" alt=""><br>可以看到此时对于盖伦来说，他的next是石头；对于石头来说，它的next为null，隐患就此埋下。接下来时间片又切到Thread1(停了半天终于轮到我出场了)，先看下Thread1的处境</p>
 <p><img src="/images/16021eeadbbc896b.png" alt=""><br>结合代码分析如下:<br>第一步：<br><img src="/images/16021eeade859242.png" alt=""><br>第二步：<br><img src="/images/16021eeae4dd036d.png" alt=""><br>第三步：<br><img src="/images/16021eeaec054b6f.png" alt=""><br>第四步：<br><img src="/images/16021eeadda9a26c.png" alt=""><br>第五步：<br><img src="/images/16021eeb048c6f07.png" alt=""><br>第六步：<br><img src="/images/16021eeb0b1ae0ca.png" alt=""><br>第七步：<br><img src="/images/16021eeb0c31970f.png" alt=""><br>第八步：<br><img src="/images/16021eeb1db16a31.png" alt=""><br>第九步：<br><img src="/images/16021eeb11f5f472.png" alt=""><br>第10步：<br><img src="/images/16021eeb31ae99e2.png" alt=""><br>到这终于看到盖伦和石头”互指”，水乳交融。<br><img src="/images/16021eeb37a1680a.png" alt=""><br>那这会带来什么后果呢？后续操作新数组的5号坑会进入死循环(注意，操作其他坑并不会有问题)，例如Java7 put操作<br><img src="/images/16021eeb3f375769.png" alt=""><br>Java7 get操作会执行getEntry，同样会引起死循环。<br><img src="/images/16021eeb398f2304.png" alt=""><br>到此，Java7多线程操作HashMap可能形成死循环的原因剖析完成。</p>
 <h4 id="Java8分析"><a href="#Java8分析" class="headerlink" title="Java8分析"></a>Java8分析</h4><p>通过上一篇的学习可知，Java7转移前后位置颠倒，而Java8转移键值对前后位置不变。同样的前戏，看下代码<br><img src="/images/16021eeb3e07d3c9.png" alt=""><br>此时模拟堆内存情况<br><img src="/images/16021eea9468e39a.png" alt=""><br>Thread1的情况<br><img src="/images/16021eeb4bfa7149.png" alt=""><br>这时候Thread2获得执行权，扩容并完成转移工作，通过上篇的学习可知，Java8在转移前会创建两条链表，即扩容后位置不加原数组长度的lo链和要加原数组长度的hi链，这里假设石头和盖伦扩容前后都在5号坑，即这是一条lo链(其实就算不在同一个坑也不影响，原因就是Java8扩容前后链顺序不变)。Thread2遍历第一次<br><img src="/images/1601c82a4ca56ccf.png" alt=""><br>第二次<br><img src="/images/16021efcb47fd57f.png" alt=""><br>可以看到Thread2全程是没有去修改石头和盖伦的引用关系，石头.next是盖伦，盖伦.next是null。那么Thread1得到执行权后其实只是重复了Thread2的工作。</p>
-<p>####总结<br>通过源码分析，Java7在多线程操作hashmap时可能引起死循环，原因是扩容转移后前后链表顺序倒置，在转移过程中修改了原来链表中节点的引用关系；Java8在同样的前提下并不会引起死循环，原因是扩容转移后前后链表顺序不变，保持之前节点的引用关系。那是不是意味着Java8就可以把HashMap用在多线程中呢？个人感觉即使不会出现死循环，但是通过源码看到put/get方法都没有加同步锁，多线程情况最容易出现的就是：无法保证上一秒put的值，下一秒get的时候还是原值，建议使用ConcurrentHashMap。</p>
-<p>####感谢<br>讲HashMap多线程死循环最详细的外国小哥</p>
-<p>####原文<br><a href="http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/" target="_blank" rel="noopener">http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/</a></p>
+<h4 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h4><p>通过源码分析，Java7在多线程操作hashmap时可能引起死循环，原因是扩容转移后前后链表顺序倒置，在转移过程中修改了原来链表中节点的引用关系；Java8在同样的前提下并不会引起死循环，原因是扩容转移后前后链表顺序不变，保持之前节点的引用关系。那是不是意味着Java8就可以把HashMap用在多线程中呢？个人感觉即使不会出现死循环，但是通过源码看到put/get方法都没有加同步锁，多线程情况最容易出现的就是：无法保证上一秒put的值，下一秒get的时候还是原值，建议使用ConcurrentHashMap。</p>
+<h4 id="感谢"><a href="#感谢" class="headerlink" title="感谢"></a>感谢</h4><p>讲HashMap多线程死循环最详细的外国小哥</p>
+<h4 id="原文"><a href="#原文" class="headerlink" title="原文"></a>原文</h4><p><a href="http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/" target="_blank" rel="noopener">http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/</a></p>
 
           
         
@@ -1698,569 +1882,6 @@ CMD java -Djava.security.egd=file:/dev/./urandom -jar /usr/cars.jar
 
 
     
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/04/10/高性能队列——Disruptor/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Simeon">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/1.jpg">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="精致的博客">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/04/10/高性能队列——Disruptor/" itemprop="url">高性能队列——Disruptor</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-04-10T10:31:47+08:00">
-                2018-04-10
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-              <span class="post-comments-count">
-                <span class="post-meta-divider">|</span>
-                <span class="post-meta-item-icon">
-                  <i class="fa fa-comment-o"></i>
-                </span>
-                <a href="/2018/04/10/高性能队列——Disruptor/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count valine-comment-count" data-xid="/2018/04/10/高性能队列——Disruptor/" itemprop="commentCount"></span>
-                </a>
-              </span>
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          
-            <h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a><strong>背景</strong></h3><p>Disruptor是英国外汇交易公司LMAX开发的一个高性能队列，研发的初衷是解决内存队列的延迟问题（在性能测试中发现竟然与I/O操作处于同样的数量级）。基于Disruptor开发的系统单线程能支撑每秒600万订单，2010年在QCon演讲后，获得了业界关注。2011年，企业应用软件专家Martin Fowler专门撰写长文介绍。同年它还获得了Oracle官方的Duke大奖。</p>
-<p>目前，包括Apache Storm、Camel、Log4j 2在内的很多知名项目都应用了Disruptor以获取高性能。在美团点评技术团队它也有不少应用，有的项目架构借鉴了它的设计机制。本文从实战角度剖析了Disruptor的实现原理。</p>
-<p>需要特别指出的是，这里所说的队列是系统内部的内存队列，而不是Kafka这样的分布式队列。另外，本文所描述的Disruptor特性限于3.3.4。</p>
-<h3 id="Java内置队列"><a href="#Java内置队列" class="headerlink" title="Java内置队列"></a><strong>Java内置队列</strong></h3><p>介绍Disruptor之前，我们先来看一看常用的线程安全的内置队列有什么问题。Java的内置队列如下表所示。</p>
-<table>
-<thead>
-<tr>
-<th>队列</th>
-<th>有界性</th>
-<th>锁</th>
-<th>数据结构</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>ArrayBlockingQueue</td>
-<td>bounded</td>
-<td>加锁</td>
-<td>arraylist</td>
-</tr>
-<tr>
-<td>LinkedBlockingQueue</td>
-<td>optionally-bounded</td>
-<td>加锁</td>
-<td>linkedlist</td>
-</tr>
-<tr>
-<td>ConcurrentLinkedQueue</td>
-<td>unbounded</td>
-<td>无锁</td>
-<td>linkedlist</td>
-</tr>
-<tr>
-<td>LinkedTransferQueue</td>
-<td>unbounded</td>
-<td>无锁</td>
-<td>linkedlist</td>
-</tr>
-<tr>
-<td>PriorityBlockingQueue</td>
-<td>unbounded</td>
-<td>加锁</td>
-<td>heap</td>
-</tr>
-<tr>
-<td>DelayQueue</td>
-<td>unbounded</td>
-<td>加锁</td>
-<td>heap</td>
-</tr>
-</tbody>
-</table>
-<p>队列的底层一般分成三种：数组、链表和堆。其中，堆一般情况下是为了实现带有优先级特性的队列，暂且不考虑。</p>
-<p>我们就从数组和链表两种数据结构来看，基于数组线程安全的队列，比较典型的是ArrayBlockingQueue，它主要通过加锁的方式来保证线程安全；基于链表的线程安全队列分成LinkedBlockingQueue和ConcurrentLinkedQueue两大类，前者也通过锁的方式来实现线程安全，而后者以及上面表格中的LinkedTransferQueue都是通过原子变量compare and swap（以下简称“CAS”）这种不加锁的方式来实现的。</p>
-<p>通过不加锁的方式实现的队列都是无界的（无法保证队列的长度在确定的范围内）；而加锁的方式，可以实现有界队列。在稳定性要求特别高的系统中，为了防止生产者速度过快，导致内存溢出，只能选择有界队列；同时，为了减少Java的垃圾回收对系统性能的影响，会尽量选择array/heap格式的数据结构。这样筛选下来，符合条件的队列就只有ArrayBlockingQueue。</p>
-<hr>
-<h3 id="ArrayBlockingQueue的问题"><a href="#ArrayBlockingQueue的问题" class="headerlink" title="ArrayBlockingQueue的问题"></a>ArrayBlockingQueue的问题</h3><p>ArrayBlockingQueue在实际使用过程中，会因为加锁和伪共享等出现严重的性能问题，我们下面来分析一下。</p>
-<h4 id="加锁"><a href="#加锁" class="headerlink" title="加锁"></a><strong>加锁</strong></h4><p>现实编程过程中，加锁通常会严重地影响性能。线程会因为竞争不到锁而被挂起，等锁被释放的时候，线程又会被恢复，这个过程中存在着很大的开销，并且通常会有较长时间的中断，因为当一个线程正在等待锁时，它不能做任何其他事情。如果一个线程在持有锁的情况下被延迟执行，例如发生了缺页错误、调度延迟或者其它类似情况，那么所有需要这个锁的线程都无法执行下去。如果被阻塞线程的优先级较高，而持有锁的线程优先级较低，就会发生优先级反转。</p>
-<p>Disruptor论文中讲述了一个实验：</p>
-<ul>
-<li>这个测试程序调用了一个函数，该函数会对一个64位的计数器循环自增5亿次。</li>
-<li>机器环境：2.4G 6核</li>
-<li>运算： 64位的计数器累加5亿次</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Time (ms)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Single thread</td>
-<td>300</td>
-</tr>
-<tr>
-<td>Single thread with CAS</td>
-<td>5,700</td>
-</tr>
-<tr>
-<td>Single thread with lock</td>
-<td>10,000</td>
-</tr>
-<tr>
-<td>Single thread with volatile write</td>
-<td>4,700</td>
-</tr>
-<tr>
-<td>Two threads with CAS</td>
-<td>30,000</td>
-</tr>
-<tr>
-<td>Two threads with lock</td>
-<td>224,000</td>
-</tr>
-</tbody>
-</table>
-<p>CAS操作比单线程无锁慢了1个数量级；有锁且多线程并发的情况下，速度比单线程无锁慢3个数量级。可见无锁速度最快。</p>
-<p>单线程情况下，不加锁的性能 &gt; CAS操作的性能 &gt; 加锁的性能。</p>
-<p>在多线程情况下，为了保证线程安全，必须使用CAS或锁，这种情况下，CAS的性能超过锁的性能，前者大约是后者的8倍。</p>
-<p>综上可知，加锁的性能是最差的。</p>
-<hr>
-<h3 id="关于锁和CAS"><a href="#关于锁和CAS" class="headerlink" title="关于锁和CAS"></a>关于锁和CAS</h3><p>保证线程安全一般分成两种方式：锁和原子变量。</p>
-<h4 id="锁"><a href="#锁" class="headerlink" title="锁"></a>锁</h4><p><img src="/images/lock.png" alt=""><br>图1 通过加锁的方式实现线程安全<br>采取加锁的方式，默认线程会冲突，访问数据时，先加上锁再访问，访问之后再解锁。通过锁界定一个临界区，同时只有一个线程进入。如上图所示，Thread2访问Entry的时候，加了锁，Thread1就不能再执行访问Entry的代码，从而保证线程安全。</p>
-<p>下面是ArrayBlockingQueue通过加锁的方式实现的offer方法，保证线程安全。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">boolean</span> <span class="title">offer</span><span class="params">(E e)</span> </span>&#123;</span><br><span class="line">    checkNotNull(e);</span><br><span class="line">    <span class="keyword">final</span> ReentrantLock lock = <span class="keyword">this</span>.lock;</span><br><span class="line">    lock.lock();</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (count == items.length)</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">false</span>;</span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">            insert(e);</span><br><span class="line">            <span class="keyword">return</span> <span class="keyword">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125; <span class="keyword">finally</span> &#123;</span><br><span class="line">        lock.unlock();</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h4 id="原子变量"><a href="#原子变量" class="headerlink" title="原子变量"></a>原子变量</h4><p>原子变量能够保证原子性的操作，意思是某个任务在执行过程中，要么全部成功，要么全部失败回滚，恢复到执行之前的初态，不存在初态和成功之间的中间状态。例如CAS操作，要么比较并交换成功，要么比较并交换失败。由CPU保证原子性。</p>
-<p>通过原子变量可以实现线程安全。执行某个任务的时候，先假定不会有冲突，若不发生冲突，则直接执行成功；当发生冲突的时候，则执行失败，回滚再重新操作，直到不发生冲突。</p>
-<p><img src="/images/cas.png" alt=""></p>
-<p>图2 通过原子变量CAS实现线程安全<br>如图所示，Thread1和Thread2都要把Entry加1。若不加锁，也不使用CAS，有可能Thread1取到了myValue=1，Thread2也取到了myValue=1，然后相加，Entry中的value值为2。这与预期不相符，我们预期的是Entry的值经过两次相加后等于3。</p>
-<p>CAS会先把Entry现在的value跟线程当初读出的值相比较，若相同，则赋值；若不相同，则赋值执行失败。一般会通过while/for循环来重新执行，直到赋值成功。</p>
-<p>代码示例是AtomicInteger的getAndAdd方法。CAS是CPU的一个指令，由CPU保证原子性。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Atomically adds the given value to the current value.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> delta the value to add</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@return</span> the previous value</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">int</span> <span class="title">getAndAdd</span><span class="params">(<span class="keyword">int</span> delta)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">for</span> (;;) &#123;</span><br><span class="line">        <span class="keyword">int</span> current = get();</span><br><span class="line">        <span class="keyword">int</span> next = current + delta;</span><br><span class="line">        <span class="keyword">if</span> (compareAndSet(current, next))</span><br><span class="line">            <span class="keyword">return</span> current;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * Atomically sets the value to the given updated value</span></span><br><span class="line"><span class="comment"> * if the current value &#123;<span class="doctag">@code</span> ==&#125; the expected value.</span></span><br><span class="line"><span class="comment"> *</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> expect the expected value</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@param</span> update the new value</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@return</span> true if successful. False return indicates that</span></span><br><span class="line"><span class="comment"> * the actual value was not equal to the expected value.</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">boolean</span> <span class="title">compareAndSet</span><span class="params">(<span class="keyword">int</span> expect, <span class="keyword">int</span> update)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">return</span> unsafe.compareAndSwapInt(<span class="keyword">this</span>, valueOffset, expect, update);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>在高度竞争的情况下，锁的性能将超过原子变量的性能，但是更真实的竞争情况下，原子变量的性能将超过锁的性能。同时原子变量不会有死锁等活跃性问题。</p>
-<hr>
-<h3 id="伪共享"><a href="#伪共享" class="headerlink" title="伪共享"></a>伪共享</h3><h4 id="什么是共享"><a href="#什么是共享" class="headerlink" title="什么是共享"></a>什么是共享</h4><p>下图是计算的基本结构。L1、L2、L3分别表示一级缓存、二级缓存、三级缓存，越靠近CPU的缓存，速度越快，容量也越小。所以L1缓存很小但很快，并且紧靠着在使用它的CPU内核；L2大一些，也慢一些，并且仍然只能被一个单独的CPU核使用；L3更大、更慢，并且被单个插槽上的所有CPU核共享；最后是主存，由全部插槽上的所有CPU核共享。</p>
-<p><img src="/images/computer.png" alt=""></p>
-<p>图3 计算机CPU与缓存示意图<br>当CPU执行运算的时候，它先去L1查找所需的数据、再去L2、然后是L3，如果最后这些缓存中都没有，所需的数据就要去主内存拿。走得越远，运算耗费的时间就越长。所以如果你在做一些很频繁的事，你要尽量确保数据在L1缓存中。</p>
-<p>另外，线程之间共享一份数据的时候，需要一个线程把数据写回主存，而另一个线程访问主存中相应的数据。</p>
-<p>下面是从CPU访问不同层级数据的时间概念:</p>
-<table>
-<thead>
-<tr>
-<th>从CPU到</th>
-<th>大约需要的CPU周期</th>
-<th>大约需要的时间</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>主存</td>
-<td></td>
-<td>约60-80ns</td>
-</tr>
-<tr>
-<td>QPI 总线传输(between sockets, not drawn)</td>
-<td></td>
-<td>约20ns</td>
-</tr>
-<tr>
-<td>L3 cache</td>
-<td>约40-45 cycles</td>
-<td>约15ns</td>
-</tr>
-<tr>
-<td>L2 cache</td>
-<td>约10 cycles</td>
-<td>约3ns</td>
-</tr>
-<tr>
-<td>L1 cache</td>
-<td>约3-4 cycles</td>
-<td>约1ns</td>
-</tr>
-<tr>
-<td>寄存器</td>
-<td>1 cycle</td>
-</tr>
-</tbody>
-</table>
-<p>可见CPU读取主存中的数据会比从L1中读取慢了近2个数量级。</p>
-<h4 id="缓存行"><a href="#缓存行" class="headerlink" title="缓存行"></a>缓存行</h4><p>Cache是由很多个cache line组成的。每个cache line通常是64字节，并且它有效地引用主内存中的一块儿地址。一个Java的long类型变量是8字节，因此在一个缓存行中可以存8个long类型的变量。</p>
-<p>CPU每次从主存中拉取数据时，会把相邻的数据也存入同一个cache line。</p>
-<p>在访问一个long数组的时候，如果数组中的一个值被加载到缓存中，它会自动加载另外7个。因此你能非常快的遍历这个数组。事实上，你可以非常快速的遍历在连续内存块中分配的任意数据结构。</p>
-<p>下面的例子是测试利用cache line的特性和不利用cache line的特性的效果对比。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> com.meituan.FalseSharing;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@author</span> gongming</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@description</span></span></span><br><span class="line"><span class="comment"> * <span class="doctag">@date</span> 16/6/4</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">CacheLineEffect</span> </span>&#123;</span><br><span class="line">    <span class="comment">//考虑一般缓存行大小是64字节，一个 long 类型占8字节</span></span><br><span class="line">    <span class="keyword">static</span>  <span class="keyword">long</span>[][] arr;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> </span>&#123;</span><br><span class="line">        arr = <span class="keyword">new</span> <span class="keyword">long</span>[<span class="number">1024</span> * <span class="number">1024</span>][];</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">1024</span> * <span class="number">1024</span>; i++) &#123;</span><br><span class="line">            arr[i] = <span class="keyword">new</span> <span class="keyword">long</span>[<span class="number">8</span>];</span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">int</span> j = <span class="number">0</span>; j &lt; <span class="number">8</span>; j++) &#123;</span><br><span class="line">                arr[i][j] = <span class="number">0L</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">long</span> sum = <span class="number">0L</span>;</span><br><span class="line">        <span class="keyword">long</span> marked = System.currentTimeMillis();</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">1024</span> * <span class="number">1024</span>; i+=<span class="number">1</span>) &#123;</span><br><span class="line">            <span class="keyword">for</span>(<span class="keyword">int</span> j =<span class="number">0</span>; j&lt; <span class="number">8</span>;j++)&#123;</span><br><span class="line">                sum = arr[i][j];</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        System.out.println(<span class="string">"Loop times:"</span> + (System.currentTimeMillis() - marked) + <span class="string">"ms"</span>);</span><br><span class="line"></span><br><span class="line">        marked = System.currentTimeMillis();</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">8</span>; i+=<span class="number">1</span>) &#123;</span><br><span class="line">            <span class="keyword">for</span>(<span class="keyword">int</span> j =<span class="number">0</span>; j&lt; <span class="number">1024</span> * <span class="number">1024</span>;j++)&#123;</span><br><span class="line">                sum = arr[j][i];</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        System.out.println(<span class="string">"Loop times:"</span> + (System.currentTimeMillis() - marked) + <span class="string">"ms"</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>在2G Hz、2核、8G内存的运行环境中测试，速度差一倍。</p>
-<p>结果：<br>Loop times:30ms<br>Loop times:65ms</p>
-<h4 id="什么是伪共享"><a href="#什么是伪共享" class="headerlink" title="什么是伪共享"></a>什么是伪共享</h4><p>ArrayBlockingQueue有三个成员变量：</p>
-<ul>
-<li>takeIndex：需要被取走的元素下标</li>
-<li>putIndex：可被元素插入的位置的下标</li>
-<li>count：队列中元素的数量</li>
-</ul>
-<p>这三个变量很容易放到一个缓存行中，但是之间修改没有太多的关联。所以每次修改，都会使之前缓存的数据失效，从而不能完全达到共享的效果。</p>
-<p><img src="/images/falseSharing.png" alt=""></p>
-<p>图4 ArrayBlockingQueue伪共享示意图<br>如上图所示，当生产者线程put一个元素到ArrayBlockingQueue时，putIndex会修改，从而导致消费者线程的缓存中的缓存行无效，需要从主存中重新读取。</p>
-<p>这种无法充分使用缓存行特性的现象，称为伪共享。</p>
-<p>对于伪共享，一般的解决方案是，增大数组元素的间隔使得由不同线程存取的元素位于不同的缓存行上，以空间换时间。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> com.meituan.FalseSharing;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">FalseSharing</span> <span class="keyword">implements</span> <span class="title">Runnable</span></span>&#123;</span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">static</span> <span class="keyword">long</span> ITERATIONS = <span class="number">500L</span> * <span class="number">1000L</span> * <span class="number">100L</span>;</span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">int</span> arrayIndex = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">private</span> <span class="keyword">static</span> ValuePadding[] longs;</span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="title">FalseSharing</span><span class="params">(<span class="keyword">final</span> <span class="keyword">int</span> arrayIndex)</span> </span>&#123;</span><br><span class="line">            <span class="keyword">this</span>.arrayIndex = arrayIndex;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(<span class="keyword">final</span> String[] args)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">            <span class="keyword">for</span>(<span class="keyword">int</span> i=<span class="number">1</span>;i&lt;<span class="number">10</span>;i++)&#123;</span><br><span class="line">                System.gc();</span><br><span class="line">                <span class="keyword">final</span> <span class="keyword">long</span> start = System.currentTimeMillis();</span><br><span class="line">                runTest(i);</span><br><span class="line">                System.out.println(<span class="string">"Thread num "</span>+i+<span class="string">" duration = "</span> + (System.currentTimeMillis() - start));</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">runTest</span><span class="params">(<span class="keyword">int</span> NUM_THREADS)</span> <span class="keyword">throws</span> InterruptedException </span>&#123;</span><br><span class="line">            Thread[] threads = <span class="keyword">new</span> Thread[NUM_THREADS];</span><br><span class="line">            longs = <span class="keyword">new</span> ValuePadding[NUM_THREADS];</span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; longs.length; i++) &#123;</span><br><span class="line">                longs[i] = <span class="keyword">new</span> ValuePadding();</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; threads.length; i++) &#123;</span><br><span class="line">                threads[i] = <span class="keyword">new</span> Thread(<span class="keyword">new</span> FalseSharing(i));</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">for</span> (Thread t : threads) &#123;</span><br><span class="line">                t.start();</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">for</span> (Thread t : threads) &#123;</span><br><span class="line">                t.join();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">run</span><span class="params">()</span> </span>&#123;</span><br><span class="line">            <span class="keyword">long</span> i = ITERATIONS + <span class="number">1</span>;</span><br><span class="line">            <span class="keyword">while</span> (<span class="number">0</span> != --i) &#123;</span><br><span class="line">                longs[arrayIndex].value = <span class="number">0L</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">ValuePadding</span> </span>&#123;</span><br><span class="line">            <span class="keyword">protected</span> <span class="keyword">long</span> p1, p2, p3, p4, p5, p6, p7;</span><br><span class="line">            <span class="keyword">protected</span> <span class="keyword">volatile</span> <span class="keyword">long</span> value = <span class="number">0L</span>;</span><br><span class="line">            <span class="keyword">protected</span> <span class="keyword">long</span> p9, p10, p11, p12, p13, p14;</span><br><span class="line">            <span class="keyword">protected</span> <span class="keyword">long</span> p15;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">public</span> <span class="keyword">final</span> <span class="keyword">static</span> <span class="class"><span class="keyword">class</span> <span class="title">ValueNoPadding</span> </span>&#123;</span><br><span class="line">            <span class="comment">// protected long p1, p2, p3, p4, p5, p6, p7;</span></span><br><span class="line">            <span class="keyword">protected</span> <span class="keyword">volatile</span> <span class="keyword">long</span> value = <span class="number">0L</span>;</span><br><span class="line">            <span class="comment">// protected long p9, p10, p11, p12, p13, p14, p15;</span></span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>在2G Hz，2核，8G内存, jdk 1.7.0_45 的运行环境下，使用了共享机制比没有使用共享机制，速度快了4倍左右。</p>
-<p>结果：<br>Thread num 1 duration = 447<br>Thread num 2 duration = 463<br>Thread num 3 duration = 454<br>Thread num 4 duration = 464<br>Thread num 5 duration = 561<br>Thread num 6 duration = 606<br>Thread num 7 duration = 684<br>Thread num 8 duration = 870<br>Thread num 9 duration = 823</p>
-<p>把代码中ValuePadding都替换为ValueNoPadding后的结果：<br>Thread num 1 duration = 446<br>Thread num 2 duration = 2549<br>Thread num 3 duration = 2898<br>Thread num 4 duration = 3931<br>Thread num 5 duration = 4716<br>Thread num 6 duration = 5424<br>Thread num 7 duration = 4868<br>Thread num 8 duration = 4595<br>Thread num 9 duration = 4540</p>
-<p>备注：在jdk1.8中，有专门的注解@Contended来避免伪共享，更优雅地解决问题。</p>
-<h3 id="Disruptor的设计方案"><a href="#Disruptor的设计方案" class="headerlink" title="Disruptor的设计方案"></a>Disruptor的设计方案</h3><p>Disruptor通过以下设计来解决队列速度慢的问题：</p>
-<ul>
-<li>环形数组结构</li>
-</ul>
-<p>为了避免垃圾回收，采用数组而非链表。同时，数组对处理器的缓存机制更加友好。</p>
-<ul>
-<li>元素位置定位</li>
-</ul>
-<p>数组长度2^n，通过位运算，加快定位的速度。下标采取递增的形式。不用担心index溢出的问题。index是long类型，即使100万QPS的处理速度，也需要30万年才能用完。</p>
-<ul>
-<li>无锁设计</li>
-</ul>
-<p>每个生产者或者消费者线程，会先申请可以操作的元素在数组中的位置，申请到之后，直接在该位置写入或者读取数据。</p>
-<p>下面忽略数组的环形结构，介绍一下如何实现无锁设计。整个过程通过原子变量CAS，保证操作的线程安全。</p>
-<h3 id="一个生产者"><a href="#一个生产者" class="headerlink" title="一个生产者"></a>一个生产者</h3><h4 id="写数据"><a href="#写数据" class="headerlink" title="写数据"></a>写数据</h4><p>生产者单线程写数据的流程比较简单：</p>
-<ol>
-<li>申请写入m个元素；</li>
-<li>若是有m个元素可以写入，则返回最大的序列号。这儿主要判断是否会覆盖未读的元素；</li>
-<li>若是返回的正确，则生产者开始写入元素。<br><img src="/images/singleWriter.png" alt=""><br>图5 单个生产者生产过程示意图<h3 id="多个生产者"><a href="#多个生产者" class="headerlink" title="多个生产者"></a>多个生产者</h3>多个生产者的情况下，会遇到“如何防止多个线程重复写同一个元素”的问题。Disruptor的解决方法是，每个线程获取不同的一段数组空间进行操作。这个通过CAS很容易达到。只需要在分配元素的时候，通过CAS判断一下这段空间是否已经分配出去即可。</li>
-</ol>
-<p>但是会遇到一个新问题：如何防止读取的时候，读到还未写的元素。Disruptor在多个生产者的情况下，引入了一个与Ring Buffer大小相同的buffer：available Buffer。当某个位置写入成功的时候，便把availble Buffer相应的位置置位，标记为写入成功。读取的时候，会遍历available Buffer，来判断元素是否已经就绪。</p>
-<p>下面分读数据和写数据两种情况介绍。</p>
-<h4 id="读数据"><a href="#读数据" class="headerlink" title="读数据"></a>读数据</h4><p>生产者多线程写入的情况会复杂很多：</p>
-<ol>
-<li>申请读取到序号n；</li>
-<li>若writer cursor &gt;= n，这时仍然无法确定连续可读的最大下标。从reader cursor开始读取available Buffer，一直查到第一个不可用的元素，然后返回最大连续可读元素的位置；</li>
-<li>消费者读取元素。</li>
-</ol>
-<p>如下图所示，读线程读到下标为2的元素，三个线程Writer1/Writer2/Writer3正在向RingBuffer相应位置写数据，写线程被分配到的最大元素下标是11。</p>
-<p>读线程申请读取到下标从3到11的元素，判断writer cursor&gt;=11。然后开始读取availableBuffer，从3开始，往后读取，发现下标为7的元素没有生产成功，于是WaitFor(11)返回6。</p>
-<p>然后，消费者读取下标从3到6共计4个元素。</p>
-<p><img src="/images/multWriterReader.png" alt=""></p>
-<p>图6 多个生产者情况下，消费者消费过程示意图</p>
-<h4 id="写数据-1"><a href="#写数据-1" class="headerlink" title="写数据"></a>写数据</h4><p>多个生产者写入的时候：</p>
-<ol>
-<li>申请写入m个元素；</li>
-<li>若是有m个元素可以写入，则返回最大的序列号。每个生产者会被分配一段独享的空间；</li>
-<li>生产者写入元素，写入元素的同时设置available Buffer里面相应的位置，以标记自己哪些位置是已经写入成功的。</li>
-</ol>
-<p>如下图所示，Writer1和Writer2两个线程写入数组，都申请可写的数组空间。Writer1被分配了下标3到下表5的空间，Writer2被分配了下标6到下标9的空间。</p>
-<p>Writer1写入下标3位置的元素，同时把available Buffer相应位置置位，标记已经写入成功，往后移一位，开始写下标4位置的元素。Writer2同样的方式。最终都写入完成。</p>
-<p><img src="/images/multWriterWrite.png" alt=""></p>
-<p>图7 多个生产者情况下，生产者生产过程示意图<br>防止不同生产者对同一段空间写入的代码，如下所示：</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">long</span> <span class="title">tryNext</span><span class="params">(<span class="keyword">int</span> n)</span> <span class="keyword">throws</span> InsufficientCapacityException</span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    <span class="keyword">if</span> (n &lt; <span class="number">1</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> IllegalArgumentException(<span class="string">"n must be &gt; 0"</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">long</span> current;</span><br><span class="line">    <span class="keyword">long</span> next;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">do</span></span><br><span class="line">    &#123;</span><br><span class="line">        current = cursor.get();</span><br><span class="line">        next = current + n;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (!hasAvailableCapacity(gatingSequences, n, current))</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">throw</span> InsufficientCapacityException.INSTANCE;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">while</span> (!cursor.compareAndSet(current, next));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> next;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>通过do/while循环的条件cursor.compareAndSet(current, next)，来判断每次申请的空间是否已经被其他生产者占据。假如已经被占据，该函数会返回失败，While循环重新执行，申请写入空间。</p>
-<p>消费者的流程与生产者非常类似，这儿就不多描述了。</p>
-<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>Disruptor通过精巧的无锁设计实现了在高并发情形下的高性能。</p>
-<p>在美团点评内部，很多高并发场景借鉴了Disruptor的设计，减少竞争的强度。其设计思想可以扩展到分布式场景，通过无锁设计，来提升服务性能。</p>
-<h3 id="代码样例"><a href="#代码样例" class="headerlink" title="代码样例"></a>代码样例</h3><p>使用Disruptor比使用ArrayBlockingQueue略微复杂，为方便读者上手，增加代码样例。</p>
-<p>代码实现的功能：每10ms向disruptor中插入一个元素，消费者读取数据，并打印到终端。详细逻辑请细读代码。</p>
-<p>以下代码基于3.3.4版本的Disruptor包。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> com.meituan.Disruptor;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * <span class="doctag">@description</span> disruptor代码样例。每10ms向disruptor中插入一个元素，消费者读取数据，并打印到终端</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="keyword">import</span> com.lmax.disruptor.*;</span><br><span class="line"><span class="keyword">import</span> com.lmax.disruptor.dsl.Disruptor;</span><br><span class="line"><span class="keyword">import</span> com.lmax.disruptor.dsl.ProducerType;</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> java.util.concurrent.ThreadFactory;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="class"><span class="keyword">class</span> <span class="title">DisruptorMain</span></span></span><br><span class="line"><span class="class"></span>&#123;</span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="keyword">void</span> <span class="title">main</span><span class="params">(String[] args)</span> <span class="keyword">throws</span> Exception</span></span><br><span class="line"><span class="function">    </span>&#123;</span><br><span class="line">        <span class="comment">// 队列中的元素</span></span><br><span class="line">        <span class="class"><span class="keyword">class</span> <span class="title">Element</span> </span>&#123;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">private</span> <span class="keyword">int</span> value;</span><br><span class="line"></span><br><span class="line">            <span class="function"><span class="keyword">public</span> <span class="keyword">int</span> <span class="title">get</span><span class="params">()</span></span>&#123;</span><br><span class="line">                <span class="keyword">return</span> value;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">            <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">set</span><span class="params">(<span class="keyword">int</span> value)</span></span>&#123;</span><br><span class="line">                <span class="keyword">this</span>.value= value;</span><br><span class="line">            &#125;</span><br><span class="line"></span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 生产者的线程工厂</span></span><br><span class="line">        ThreadFactory threadFactory = <span class="keyword">new</span> ThreadFactory()&#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="function"><span class="keyword">public</span> Thread <span class="title">newThread</span><span class="params">(Runnable r)</span> </span>&#123;</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">new</span> Thread(r, <span class="string">"simpleThread"</span>);</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// RingBuffer生产工厂,初始化RingBuffer的时候使用</span></span><br><span class="line">        EventFactory&lt;Element&gt; factory = <span class="keyword">new</span> EventFactory&lt;Element&gt;() &#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="function"><span class="keyword">public</span> Element <span class="title">newInstance</span><span class="params">()</span> </span>&#123;</span><br><span class="line">                <span class="keyword">return</span> <span class="keyword">new</span> Element();</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 处理Event的handler</span></span><br><span class="line">        EventHandler&lt;Element&gt; handler = <span class="keyword">new</span> EventHandler&lt;Element&gt;()&#123;</span><br><span class="line">            <span class="meta">@Override</span></span><br><span class="line">            <span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">onEvent</span><span class="params">(Element element, <span class="keyword">long</span> sequence, <span class="keyword">boolean</span> endOfBatch)</span></span></span><br><span class="line"><span class="function">            </span>&#123;</span><br><span class="line">                System.out.println(<span class="string">"Element: "</span> + element.get());</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 阻塞策略</span></span><br><span class="line">        BlockingWaitStrategy strategy = <span class="keyword">new</span> BlockingWaitStrategy();</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 指定RingBuffer的大小</span></span><br><span class="line">        <span class="keyword">int</span> bufferSize = <span class="number">16</span>;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 创建disruptor，采用单生产者模式</span></span><br><span class="line">        Disruptor&lt;Element&gt; disruptor = <span class="keyword">new</span> Disruptor(factory, bufferSize, threadFactory, ProducerType.SINGLE, strategy);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 设置EventHandler</span></span><br><span class="line">        disruptor.handleEventsWith(handler);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 启动disruptor的线程</span></span><br><span class="line">        disruptor.start();</span><br><span class="line"></span><br><span class="line">        RingBuffer&lt;Element&gt; ringBuffer = disruptor.getRingBuffer();</span><br><span class="line"></span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> l = <span class="number">0</span>; <span class="keyword">true</span>; l++)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">// 获取下一个可用位置的下标</span></span><br><span class="line">            <span class="keyword">long</span> sequence = ringBuffer.next();  </span><br><span class="line">            <span class="keyword">try</span></span><br><span class="line">            &#123;</span><br><span class="line">                <span class="comment">// 返回可用位置的元素</span></span><br><span class="line">                Element event = ringBuffer.get(sequence); </span><br><span class="line">                <span class="comment">// 设置该位置元素的值</span></span><br><span class="line">                event.set(l); </span><br><span class="line">            &#125;</span><br><span class="line">            <span class="keyword">finally</span></span><br><span class="line">            &#123;</span><br><span class="line">                ringBuffer.publish(sequence);</span><br><span class="line">            &#125;</span><br><span class="line">            Thread.sleep(<span class="number">10</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<p>性能<br>以下面这些模式测试性能:</p>
-<p><img src="/images/QWE.jpg" alt=""></p>
-<p>吞吐量测试数据（每秒的数量）如下。</p>
-<p>环境：</p>
-<ul>
-<li>CPU:Intel Core i7 860 @ 2.8 GHz without HT</li>
-<li>JVM:Java 1.6.0_25 64-bit</li>
-<li>OS:Windows 7</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>ABQ</th>
-<th>Disruptor</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Unicast: 1P – 1C</td>
-<td>5,339,256</td>
-<td>25,998,336</td>
-</tr>
-<tr>
-<td>Pipeline: 1P – 3C</td>
-<td>2,128,918</td>
-<td>16,806,157</td>
-</tr>
-<tr>
-<td>Sequencer: 3P – 1C</td>
-<td>5,539,531</td>
-<td>13,403,268</td>
-</tr>
-<tr>
-<td>Multicast: 1P – 3C</td>
-<td>1,077,384</td>
-<td>9,377,871</td>
-</tr>
-<tr>
-<td>Diamond: 1P – 3C</td>
-<td>2,113,941</td>
-<td>16,143,613</td>
-</tr>
-</tbody>
-</table>
-<p>环境：</p>
-<ul>
-<li>CPU:Intel Core i7-2720QM</li>
-<li>JVM:Java 1.6.0_25 64-bit</li>
-<li>OS:Ubuntu 11.04</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>ABQ</th>
-<th>Disruptor</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Unicast: 1P – 1C</td>
-<td>4,057,453</td>
-<td>22,381,378</td>
-</tr>
-<tr>
-<td>Pipeline: 1P – 3C</td>
-<td>2,006,903</td>
-<td>15,857,913</td>
-</tr>
-<tr>
-<td>Sequencer: 3P – 1C</td>
-<td>2,056,118</td>
-<td>14,540,519</td>
-</tr>
-<tr>
-<td>Multicast: 1P – 3C</td>
-<td>260,733</td>
-<td>10,860,121</td>
-</tr>
-<tr>
-<td>Diamond: 1P – 3C</td>
-<td>2,082,725</td>
-<td>15,295,197</td>
-</tr>
-</tbody>
-</table>
-<p>依据并发竞争的激烈程度的不同，Disruptor比ArrayBlockingQueue吞吐量快4~7倍。</p>
-<p>按照Pipeline: 1P – 3C的连接模式测试延迟，生产者两次写入之间的延迟为1ms。</p>
-<p>运行环境：</p>
-<ul>
-<li>CPU:2.2GHz Core i7-2720QM</li>
-<li>Java: 1.6.0_25 64-bit</li>
-<li>OS:Ubuntu 11.04.</li>
-</ul>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>Array Blocking Queue (ns)</th>
-<th>Disruptor (ns)</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>99% observations less than</td>
-<td>2,097,152</td>
-<td>128</td>
-</tr>
-<tr>
-<td>99.99% observations less than</td>
-<td>4,194,304</td>
-<td>8,192</td>
-</tr>
-<tr>
-<td>Max Latency</td>
-<td>5,069,086</td>
-<td>175,567</td>
-</tr>
-<tr>
-<td>Mean Latency</td>
-<td>32,757</td>
-<td>52</td>
-</tr>
-<tr>
-<td>Min Latency</td>
-<td>145</td>
-<td>29</td>
-</tr>
-</tbody>
-</table>
-<p>可见，平均延迟差了3个数量级。</p>
-<h3 id="等待策略"><a href="#等待策略" class="headerlink" title="等待策略"></a>等待策略</h3><h4 id="生产者的等待策略"><a href="#生产者的等待策略" class="headerlink" title="生产者的等待策略"></a>生产者的等待策略</h4><p>暂时只有休眠1ns。</p>
-<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LockSupport.parkNanos(<span class="number">1</span>);</span><br></pre></td></tr></table></figure>
-<h4 id="消费者的等待策略"><a href="#消费者的等待策略" class="headerlink" title="消费者的等待策略"></a>消费者的等待策略</h4><table>
-<thead>
-<tr>
-<th>名称</th>
-<th>措施</th>
-<th>适用场景</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>BlockingWaitStrategy</td>
-<td>加锁</td>
-<td>CPU资源紧缺，吞吐量和延迟并不重要的场景</td>
-</tr>
-<tr>
-<td>BusySpinWaitStrategy</td>
-<td>自旋</td>
-<td>通过不断重试，减少切换线程导致的系统调用，而降低延迟。推荐在线程绑定到固定的CPU的场景下使用</td>
-</tr>
-<tr>
-<td>PhasedBackoffWaitStrategy</td>
-<td>自旋 + yield + 自定义策略</td>
-<td>CPU资源紧缺，吞吐量和延迟并不重要的场景</td>
-</tr>
-<tr>
-<td>SleepingWaitStrategy</td>
-<td>自旋 + yield + sleep</td>
-<td>性能和CPU资源之间有很好的折中。延迟不均匀</td>
-</tr>
-<tr>
-<td>TimeoutBlockingWaitStrategy</td>
-<td>加锁，有超时限制</td>
-<td>CPU资源紧缺，吞吐量和延迟并不重要的场景</td>
-</tr>
-<tr>
-<td>YieldingWaitStrategy</td>
-<td>自旋 + yield + 自旋</td>
-<td>性能和CPU资源之间有很好的折中。延迟比较均匀</td>
-</tr>
-</tbody>
-</table>
-<h3 id="Log4j-2应用场景"><a href="#Log4j-2应用场景" class="headerlink" title="Log4j 2应用场景"></a>Log4j 2应用场景</h3><p>Log4j 2相对于Log4j 1最大的优势在于多线程并发场景下性能更优。该特性源自于Log4j 2的异步模式采用了Disruptor来处理。<br>在Log4j 2的配置文件中可以配置WaitStrategy，默认是Timeout策略。下面是Log4j 2中对WaitStrategy的配置官方文档：</p>
-<table>
-<thead>
-<tr>
-<th>System Property</th>
-<th>Default Value</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>AsyncLogger.WaitStrategy</td>
-<td>Timeout</td>
-<td>Valid values: Block, Timeout, Sleep, Yield. Block is a strategy that uses a lock and condition variable for the I/O thread waiting for log events. Block can be used when throughput and low-latency are not as important as CPU resource. Recommended for resource constrained/virtualised environments. Timeout is a variation of the Block strategy that will periodically wake up from the lock condition await() call. This ensures that if a notification is missed somehow the consumer thread is not stuck but will recover with a small latency delay (default 10ms). Sleep is a strategy that initially spins, then uses a Thread.yield(), and eventually parks for the minimum number of nanos the OS and JVM will allow while the I/O thread is waiting for log events. Sleep is a good compromise between performance and CPU resource. This strategy has very low impact on the application thread, in exchange for some additional latency for actually getting the message logged. Yield is a strategy that uses a Thread.yield() for waiting for log events after an initially spinning. Yield is a good compromise between performance and CPU resource, but may use more CPU than Sleep in order to get the message logged to disk sooner.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="性能差异"><a href="#性能差异" class="headerlink" title="性能差异"></a>性能差异</h3><p>loggers all async采用的是Disruptor，而Async Appender采用的是ArrayBlockingQueue队列。</p>
-<p>由图可见，单线程情况下，loggers all async与Async Appender吞吐量相差不大，但是在64个线程的时候，loggers all async的吞吐量比Async Appender增加了12倍，是Sync模式的68倍。</p>
-<p><img src="/images/log4j2.png" alt=""></p>
-<p>图8 Log4j 2各个模式性能比较<br>美团点评在公司内部统一推行日志接入规范，要求必须使用Log4j 2，使普通单机QPS的上限不再只停留在几千，极高地提升了服务性能。</p>
-<h3 id="参考文档"><a href="#参考文档" class="headerlink" title="参考文档"></a>参考文档</h3><p><a href="https://tech.meituan.com/disruptor.html" target="_blank" rel="noopener">https://tech.meituan.com/disruptor.html</a><br><a href="http://brokendreams.iteye.com/blog/2255720" target="_blank" rel="noopener">http://brokendreams.iteye.com/blog/2255720</a><br><a href="http://ifeve.com/dissecting-disruptor-whats-so-special/" target="_blank" rel="noopener">http://ifeve.com/dissecting-disruptor-whats-so-special/</a><br><a href="https://github.com/LMAX-Exchange/disruptor/wiki/Performance-Results" target="_blank" rel="noopener">https://github.com/LMAX-Exchange/disruptor/wiki/Performance-Results</a><br><a href="https://lmax-exchange.github.io/disruptor/" target="_blank" rel="noopener">https://lmax-exchange.github.io/disruptor/</a><br><a href="https://logging.apache.org/log4j/2.x/manual/async.html" target="_blank" rel="noopener">https://logging.apache.org/log4j/2.x/manual/async.html</a></p>
-
-          
-        
-      
-    </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
   </section>
 
   
@@ -2316,7 +1937,7 @@ CMD java -Djava.security.egd=file:/dev/./urandom -jar /usr/cars.jar
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">15</span>
+                  <span class="site-state-item-count">16</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
