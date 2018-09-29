@@ -73,12 +73,12 @@
 
 
 
-<meta name="description" content="图解HashMap(二)概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过Has">
+<meta name="description" content="概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过HashMap的阀值时，Has">
 <meta property="og:type" content="article">
 <meta property="og:title" content="图解HashMap(二)">
 <meta property="og:url" content="http://yoursite.com/2018/09/29/图解HashMap(二)/index.html">
 <meta property="og:site_name" content="精致的博客">
-<meta property="og:description" content="图解HashMap(二)概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过Has">
+<meta property="og:description" content="概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过HashMap的阀值时，Has">
 <meta property="og:locale" content="zh-Hans">
 <meta property="og:image" content="http://yoursite.com/images/16021eea95cacabc.png">
 <meta property="og:image" content="http://yoursite.com/images/16021eea91aa7e92.png">
@@ -106,10 +106,10 @@
 <meta property="og:image" content="http://yoursite.com/images/16021eeb4bfa7149.png">
 <meta property="og:image" content="http://yoursite.com/images/1601c82a4ca56ccf.png">
 <meta property="og:image" content="http://yoursite.com/images/16021efcb47fd57f.png">
-<meta property="og:updated_time" content="2018-09-29T01:57:18.031Z">
+<meta property="og:updated_time" content="2018-09-29T02:03:34.724Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="图解HashMap(二)">
-<meta name="twitter:description" content="图解HashMap(二)概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过Has">
+<meta name="twitter:description" content="概述上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。 Java7分析通过上一篇的整体学习，可以知道当存入的键值对超过HashMap的阀值时，Has">
 <meta name="twitter:image" content="http://yoursite.com/images/16021eea95cacabc.png">
 
 
@@ -394,7 +394,7 @@
       
 
       
-        <h3 id="图解HashMap-二"><a href="#图解HashMap-二" class="headerlink" title="图解HashMap(二)"></a>图解HashMap(二)</h3><h4 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h4><p>上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。</p>
+        <h4 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h4><p>上篇分析了HashMap的设计思想以及Java7和Java8源码上的实现，当然还有一些”坑”还没填完，比如大家都知道HashMap是线程不安全的数据结构，多线程情况下HashMap会引起死循环引用，它是怎么产生的？Java8引入了红黑树，那是怎么提高效率的？本篇先填第一个坑，还是以图解的形式加深理解。</p>
 <h4 id="Java7分析"><a href="#Java7分析" class="headerlink" title="Java7分析"></a>Java7分析</h4><p>通过上一篇的整体学习，可以知道当存入的键值对超过HashMap的阀值时，HashMap会扩容，即创建一个新的数组，并将原数组里的键值对”转移”到新的数组中。在“转移”的时候，会根据新的数组长度和要转移的键值对key值重新计算在新数组中的位置。重温下Java7中负责”转移”功能的代码</p>
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">transfer</span><span class="params">(Entry[] newTable, <span class="keyword">boolean</span> rehash)</span> </span>&#123;</span><br><span class="line">    <span class="comment">//获取新数组的长度</span></span><br><span class="line">    <span class="keyword">int</span> newCapacity = newTable.length;</span><br><span class="line">    <span class="comment">//遍历旧数组中的键值对</span></span><br><span class="line">    <span class="keyword">for</span> (Entry&lt;K,V&gt; e : table) &#123;</span><br><span class="line">        <span class="keyword">while</span>(<span class="keyword">null</span> != e) &#123;</span><br><span class="line">            Entry&lt;K,V&gt; next = e.next;</span><br><span class="line">            <span class="keyword">if</span> (rehash) &#123;</span><br><span class="line">                e.hash = <span class="keyword">null</span> == e.key ? <span class="number">0</span> : hash(e.key);</span><br><span class="line">            &#125;</span><br><span class="line">            <span class="comment">//计算在新表中的索引，并到新数组中</span></span><br><span class="line">            <span class="keyword">int</span> i = indexFor(e.hash, newCapacity);</span><br><span class="line">            e.next = newTable[i];</span><br><span class="line">            newTable[i] = e;</span><br><span class="line">            e = next;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>为了加深理解，画个图如下<br><img src="/images/16021eea95cacabc.png" alt=""></p>
@@ -409,9 +409,9 @@
 <p><img src="/images/16021eead7b0c8b2.png" alt=""><br>可以看到此时对于盖伦来说，他的next是石头；对于石头来说，它的next为null，隐患就此埋下。接下来时间片又切到Thread1(停了半天终于轮到我出场了)，先看下Thread1的处境</p>
 <p><img src="/images/16021eeadbbc896b.png" alt=""><br>结合代码分析如下:<br>第一步：<br><img src="/images/16021eeade859242.png" alt=""><br>第二步：<br><img src="/images/16021eeae4dd036d.png" alt=""><br>第三步：<br><img src="/images/16021eeaec054b6f.png" alt=""><br>第四步：<br><img src="/images/16021eeadda9a26c.png" alt=""><br>第五步：<br><img src="/images/16021eeb048c6f07.png" alt=""><br>第六步：<br><img src="/images/16021eeb0b1ae0ca.png" alt=""><br>第七步：<br><img src="/images/16021eeb0c31970f.png" alt=""><br>第八步：<br><img src="/images/16021eeb1db16a31.png" alt=""><br>第九步：<br><img src="/images/16021eeb11f5f472.png" alt=""><br>第10步：<br><img src="/images/16021eeb31ae99e2.png" alt=""><br>到这终于看到盖伦和石头”互指”，水乳交融。<br><img src="/images/16021eeb37a1680a.png" alt=""><br>那这会带来什么后果呢？后续操作新数组的5号坑会进入死循环(注意，操作其他坑并不会有问题)，例如Java7 put操作<br><img src="/images/16021eeb3f375769.png" alt=""><br>Java7 get操作会执行getEntry，同样会引起死循环。<br><img src="/images/16021eeb398f2304.png" alt=""><br>到此，Java7多线程操作HashMap可能形成死循环的原因剖析完成。</p>
 <h4 id="Java8分析"><a href="#Java8分析" class="headerlink" title="Java8分析"></a>Java8分析</h4><p>通过上一篇的学习可知，Java7转移前后位置颠倒，而Java8转移键值对前后位置不变。同样的前戏，看下代码<br><img src="/images/16021eeb3e07d3c9.png" alt=""><br>此时模拟堆内存情况<br><img src="/images/16021eea9468e39a.png" alt=""><br>Thread1的情况<br><img src="/images/16021eeb4bfa7149.png" alt=""><br>这时候Thread2获得执行权，扩容并完成转移工作，通过上篇的学习可知，Java8在转移前会创建两条链表，即扩容后位置不加原数组长度的lo链和要加原数组长度的hi链，这里假设石头和盖伦扩容前后都在5号坑，即这是一条lo链(其实就算不在同一个坑也不影响，原因就是Java8扩容前后链顺序不变)。Thread2遍历第一次<br><img src="/images/1601c82a4ca56ccf.png" alt=""><br>第二次<br><img src="/images/16021efcb47fd57f.png" alt=""><br>可以看到Thread2全程是没有去修改石头和盖伦的引用关系，石头.next是盖伦，盖伦.next是null。那么Thread1得到执行权后其实只是重复了Thread2的工作。</p>
-<p>总结<br>通过源码分析，Java7在多线程操作hashmap时可能引起死循环，原因是扩容转移后前后链表顺序倒置，在转移过程中修改了原来链表中节点的引用关系；Java8在同样的前提下并不会引起死循环，原因是扩容转移后前后链表顺序不变，保持之前节点的引用关系。那是不是意味着Java8就可以把HashMap用在多线程中呢？个人感觉即使不会出现死循环，但是通过源码看到put/get方法都没有加同步锁，多线程情况最容易出现的就是：无法保证上一秒put的值，下一秒get的时候还是原值，建议使用ConcurrentHashMap。</p>
-<p>感谢<br>讲HashMap多线程死循环最详细的外国小哥</p>
-<p>原文：<a href="http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/" target="_blank" rel="noopener">http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/</a></p>
+<p>####总结<br>通过源码分析，Java7在多线程操作hashmap时可能引起死循环，原因是扩容转移后前后链表顺序倒置，在转移过程中修改了原来链表中节点的引用关系；Java8在同样的前提下并不会引起死循环，原因是扩容转移后前后链表顺序不变，保持之前节点的引用关系。那是不是意味着Java8就可以把HashMap用在多线程中呢？个人感觉即使不会出现死循环，但是通过源码看到put/get方法都没有加同步锁，多线程情况最容易出现的就是：无法保证上一秒put的值，下一秒get的时候还是原值，建议使用ConcurrentHashMap。</p>
+<p>####感谢<br>讲HashMap多线程死循环最详细的外国小哥</p>
+<p>####原文<br><a href="http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/" target="_blank" rel="noopener">http://rkhcy.github.io/2017/12/04/%E5%9B%BE%E8%A7%A3HashMap(%E4%BA%8C)/</a></p>
 
       
     </div>
@@ -596,7 +596,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#图解HashMap-二"><span class="nav-number">1.</span> <span class="nav-text">图解HashMap(二)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#概述"><span class="nav-number">1.1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Java7分析"><span class="nav-number">1.2.</span> <span class="nav-text">Java7分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Java8分析"><span class="nav-number">1.3.</span> <span class="nav-text">Java8分析</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-4"><a class="nav-link" href="#概述"><span class="nav-number">1.</span> <span class="nav-text">概述</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Java7分析"><span class="nav-number">2.</span> <span class="nav-text">Java7分析</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#Java8分析"><span class="nav-number">3.</span> <span class="nav-text">Java8分析</span></a></li></ol></div>
             
 
           </div>
