@@ -287,6 +287,153 @@
   
   
   <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/10/26/mysql主从复制/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Simeon">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/1.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="精致的博客">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2018/10/26/mysql主从复制/" itemprop="url">mysql主从复制</a></h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-10-26T09:52:14+08:00">
+                2018-10-26
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/10/26/mysql主从复制/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count valine-comment-count" data-xid="/2018/10/26/mysql主从复制/" itemprop="commentCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <h4 id="版本最好一致，防止出现兼容性问题。否则让低版本的作为主库，高版本的作为从库。"><a href="#版本最好一致，防止出现兼容性问题。否则让低版本的作为主库，高版本的作为从库。" class="headerlink" title="版本最好一致，防止出现兼容性问题。否则让低版本的作为主库，高版本的作为从库。"></a><strong>版本最好一致，防止出现兼容性问题。否则让低版本的作为主库，高版本的作为从库。</strong></h4><h2 id="1：主库设置："><a href="#1：主库设置：" class="headerlink" title="1：主库设置："></a>1：主库设置：</h2><p>环境：5.7.23-ubuntu</p>
+<h4 id="一-修改配置文件"><a href="#一-修改配置文件" class="headerlink" title="一:修改配置文件"></a>一:修改配置文件</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vim /etc/mysql/mysql.conf.d/mysqld.cnf</span><br></pre></td></tr></table></figure>
+<p>修改<br><code>server-id = 1</code>     与从库ID不同。</p>
+<p><code>log_bin = /var/log/mysql/mysql-bin.log</code>    二进制文件位置。</p>
+<p><code>binlog_do_db = simeon</code>指定要复制的数据库，注释掉的话表示监控全部数据库。如果需要监控多个数据库，多次复制这一行，修改数据库名字即可。</p>
+<p><code>binlog_ignore_db</code> 忽略掉某数据库。</p>
+<h4 id="二：重启服务"><a href="#二：重启服务" class="headerlink" title="二：重启服务"></a>二：重启服务</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">service mysql restart</span><br></pre></td></tr></table></figure>
+<h4 id="三：创建复制用户并授权"><a href="#三：创建复制用户并授权" class="headerlink" title="三：创建复制用户并授权"></a>三：创建复制用户并授权</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">mysql&gt;</span> CREATE USER 'test1'@'%' IDENTIFIED BY 'test1';</span><br><span class="line"><span class="meta">mysql&gt;</span> GRANT REPLICATION SLAVE ON *.* TO 'test1'@'%';</span><br></pre></td></tr></table></figure>
+<h4 id="四：记录下信息"><a href="#四：记录下信息" class="headerlink" title="四：记录下信息"></a>四：记录下信息</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">mysql&gt;</span>  show master status;</span><br><span class="line">+------------------+----------+--------------+------------------+-------------------+</span><br><span class="line">| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |</span><br><span class="line">+------------------+----------+--------------+------------------+-------------------+</span><br><span class="line">| mysql-bin.000001 |      629 |              |                  |                   |</span><br><span class="line">+------------------+----------+--------------+------------------+-------------------+</span><br><span class="line">1 row in set (0.00 sec)</span><br></pre></td></tr></table></figure>
+<hr>
+<h2 id="2：从库设置："><a href="#2：从库设置：" class="headerlink" title="2：从库设置："></a>2：从库设置：</h2><p>环境：5.7.23-win10</p>
+<h4 id="一-修改配置文件-1"><a href="#一-修改配置文件-1" class="headerlink" title="一:修改配置文件"></a>一:修改配置文件</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">C:\ProgramData\MySQL\MySQL Server 5.7\my.ini</span><br></pre></td></tr></table></figure>
+<p>修改<br><code>server-id = 2</code></p>
+<h4 id="二：重启服务-1"><a href="#二：重启服务-1" class="headerlink" title="二：重启服务"></a>二：重启服务</h4><h4 id="三：将从库连接到主库"><a href="#三：将从库连接到主库" class="headerlink" title="三：将从库连接到主库"></a>三：将从库连接到主库</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">mysql&gt;</span>  CHANGE MASTER TO MASTER_HOST='115.115.115.115', MASTER_USER='test1', MASTER_PASSWORD='test1', MASTER_LOG_FILE='mysql-bin.000001', MASTER_LOG_POS=629;</span><br></pre></td></tr></table></figure>
+<p>这里的MASTER_HOST是主库的IP，MASTER_USER刚刚创建的新复制用户，MASTER_LOG_FILE是上面show master status里的主库的日志文件名字，MASTER_LOG_POS是主库的日志里的Position。也可以设为0，表示从主库开启这个日志的时候全部记录都要操作一遍。</p>
+<h4 id="四：开启从库服务"><a href="#四：开启从库服务" class="headerlink" title="四：开启从库服务"></a>四：开启从库服务</h4><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">mysql&gt;</span>  start slave;</span><br></pre></td></tr></table></figure>
+<p>看一下状态<br><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">mysql&gt;</span>  show slave status;</span><br></pre></td></tr></table></figure></p>
+<p>如果是Waiting for master to send event，就表示成功了。</p>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
     <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/09/29/图解ConcurrentHashMap/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -1745,146 +1892,6 @@ CMD java -Djava.security.egd=file:/dev/./urandom -jar /usr/cars.jar
 
 
     
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/04/11/dock/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Simeon">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/1.jpg">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="精致的博客">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/04/11/dock/" itemprop="url">初探docker</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-04-11T20:53:24+08:00">
-                2018-04-11
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-              <span class="post-comments-count">
-                <span class="post-meta-divider">|</span>
-                <span class="post-meta-item-icon">
-                  <i class="fa fa-comment-o"></i>
-                </span>
-                <a href="/2018/04/11/dock/#comments" itemprop="discussionUrl">
-                  <span class="post-comments-count valine-comment-count" data-xid="/2018/04/11/dock/" itemprop="commentCount"></span>
-                </a>
-              </span>
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          
-            <p><strong>1：下载镜像images</strong><br><code>docker pull mysql</code></p>
-<p><strong>2：查看所有镜像</strong><br><code>docker images</code></p>
-<p><strong>3：安装镜像</strong><br><code>docker run --name mysql -p 3306:3306 -e MYSQL\_ROOT\_PASSWORD=root -d mysql</code></p>
-<p>（其中<code>--name</code>表示安装后的容器名字，-e是mysql的密码配置，-d表示要安装哪一个镜像,-p表示将容器内的3306端口(第二个)映射到主机的3306端口上(第一个)）</p>
-<p><strong>4：删除镜像</strong><br>首先要停止容器： <code>docker stop mysql</code><br>然后删除：       <code>docker rm mysql</code></p>
-<p><strong>5：开启容器：</strong><br><code>docker start python</code></p>
-<p>！！！！注意run和start的区别：run命令表示安装镜像，它包括了将镜像放入容器中（docker create）,然后将容器启动，使之变成运行时容器（docker start）。<br>所以每次执行run都会新建一个容器。。。。。。docker run 只在第一次运行时使用，将镜像放到容器中，以后再次启动这个容器时，只需要使用命令docker start 即可。</p>
-<p><strong>6：进入容器</strong><br><code>docker exec -it java /bin/bash</code><br><code>docker exec -it python python</code></p>
-<p>-t：进入终端<br>-i：获得一个交互式的连接，通过获取container的输入<br>/bin/bash：java的命令，<br>python: python的命令，</p>
-<p>退出docker容器:<br>Ctrl+D</p>
-<p><strong>7：关闭容器</strong><br><code>docker stop python</code></p>
-
-          
-        
-      
-    </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
   </section>
 
   
@@ -1940,7 +1947,7 @@ CMD java -Djava.security.egd=file:/dev/./urandom -jar /usr/cars.jar
               
                 <a href="/archives/">
               
-                  <span class="site-state-item-count">16</span>
+                  <span class="site-state-item-count">17</span>
                   <span class="site-state-item-name">日志</span>
                 </a>
               </div>
@@ -2041,7 +2048,6 @@ CMD java -Djava.security.egd=file:/dev/./urandom -jar /usr/cars.jar
 
 
         
-
 
 
 
